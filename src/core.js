@@ -85,7 +85,7 @@ const Input = {
 // Labels for controls in messages: {jump} etc. switch between keyboard and touch wording
 const KEY_LABELS = {
   key: { move: '←→', dash: 'Shift（または →→ 2度押し）', jump: 'Z', attack: 'X', call: 'C', down: '↓', up: '↑', pause: 'Enter' },
-  touch: { move: 'スティック', dash: 'スティックを大きく倒す', jump: '「ジャンプ」', attack: '「杖」', call: '「呼ぶ」',
+  touch: { move: 'スティック', dash: 'スティックを大きく倒す', jump: '「ジャンプ」', attack: '「灯竿」', call: '「呼ぶ」',
     down: 'スティックの↓', up: 'スティックの↑', pause: '❚❚' },
 };
 function fmtKeys(html) {
@@ -194,20 +194,23 @@ function loadSheets() {
   for (const key in ASSETS) {
     const a = ASSETS[key];
     const img = new Image();
-    Sheets[key] = { img, f: a.f || {}, carry: a.carry || {}, white: null };
+    Sheets[key] = { img, f: a.f || {}, carry: a.carry || {}, white: null, dark: null };
     jobs.push(new Promise((res) => { img.onload = res; img.src = a.src; }));
   }
   return Promise.all(jobs).then(() => {
-    // white silhouettes for hit flashes
-    for (const key of ['hero', 'heroine', 'shadow']) {
-      const s = Sheets[key];
+    // solid silhouettes: white for hit flashes, dark for shadows cast on walls
+    const silhouette = (img, color) => {
       const c = document.createElement('canvas');
-      c.width = s.img.width; c.height = s.img.height;
+      c.width = img.width; c.height = img.height;
       const x = c.getContext('2d');
-      x.drawImage(s.img, 0, 0);
+      x.drawImage(img, 0, 0);
       x.globalCompositeOperation = 'source-in';
-      x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
-      s.white = c;
+      x.fillStyle = color; x.fillRect(0, 0, c.width, c.height);
+      return c;
+    };
+    for (const key of ['hero', 'heroine', 'shadow']) {
+      Sheets[key].white = silhouette(Sheets[key].img, '#fff');
+      Sheets[key].dark = silhouette(Sheets[key].img, '#0a0612');
     }
   });
 }
@@ -302,6 +305,12 @@ class Particles {
   }
   update() {
     for (const p of this.list) {
+      if (p.home && p.t > (p.delay || 0)) {
+        // drift towards a moving target (motes of light returning to Lumina)
+        const dx = p.home.x - p.x, dy = p.home.y - 16 - p.y;
+        p.vx = p.vx * 0.9 + dx * 0.012; p.vy = p.vy * 0.9 + dy * 0.012;
+        if (dx * dx + dy * dy < 30) p.t = p.life;
+      }
       p.t++; p.vx *= p.drag; p.vy = p.vy * p.drag + p.g; p.x += p.vx; p.y += p.vy;
     }
     this.list = this.list.filter((p) => p.t < p.life);

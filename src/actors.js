@@ -124,6 +124,7 @@ class Hero extends Body {
 
   frame() {
     const s = this.state, t = this.t;
+    if (s === 'scripted' && this.pose) return this.pose;
     if (s === 'hurt') return 'jump13';
     if (s === 'fallout') return 'jump11';
     if (s === 'reach' || s === 'catchwait') return 'jump1';
@@ -578,7 +579,14 @@ class Shadow extends Body {
     this.hp--; this.flash = 10;
     this.vx = dir * 2.6; this.vy = -1.4;
     game.particles.burst(this.x, this.y - 24, 10, { col: '#e8d8ff', life: 16, max: 2 });
-    if (this.hp <= 0) { this.setState('die'); Sfx.play('kill'); game.stats.kills++; }
+    if (this.hp <= 0) {
+      this.setState('die'); Sfx.play('kill'); game.stats.kills++;
+      // the shadow comes apart into motes of light that drift back to Lumina
+      for (let i = 0; i < 14; i++) {
+        game.particles.add({ x: this.x + rand(-8, 8), y: this.y - rand(8, 40), vx: rand(-1.2, 1.2), vy: rand(-1.6, -0.2),
+          life: 140, delay: 18 + i, home: h, col: i % 3 ? '#ffe9a8' : '#ffffff', size: 1 + (i % 4 === 0 ? 1 : 0), fade: false });
+      }
+    }
     else { this.setState('hurt'); Sfx.play('hit'); }
     return true;
   }

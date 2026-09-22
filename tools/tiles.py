@@ -411,6 +411,128 @@ def bg_mid():
     return t
 
 
+# --- props for Lumina's cell and the prologue --------------------------------
+def rope():
+    t = rgba(4, 16)
+    for y in range(16):
+        for x in range(1, 3):
+            t[y, x] = col((150, 112, 66) if (x + y) % 3 else (104, 74, 44))
+    t[:, 0][::4] = col((80, 56, 34))
+    return t
+
+
+def hole():
+    """Collapsed opening in a ceiling, drawn over the ceiling's bottom edge."""
+    w, h = 40, 12
+    c = SS(w, h)
+    c.poly([(2, 0), (38, 0), (35, 5), (31, 9), (24, 11), (15, 10), (8, 8), (4, 4)], (8, 6, 14, 255))
+    c.poly([(12, 0), (28, 0), (26, 4), (20, 7), (14, 5)], (44, 50, 78, 255))
+    t = snap(c.down(), [(8, 6, 14), (44, 50, 78)])
+    r = np.random.default_rng(5)
+    for _ in range(14):
+        x, y = int(r.integers(3, 37)), int(r.integers(0, 10))
+        if t[y, x, 3]:
+            t[y, x] = col(F_DARK)
+    return outline(t, F_MORTAR, grow=False)
+
+
+def rubble():
+    w, h = 44, 12
+    c = SS(w, h)
+    r = np.random.default_rng(9)
+    for _ in range(16):
+        x, y = r.uniform(4, 40), r.uniform(6, 11)
+        rr = r.uniform(2.0, 4.2)
+        c.ellipse(x, y, rr, rr * 0.8, (F_MID if r.random() < 0.6 else F_DARK) + (255,))
+    for _ in range(7):
+        x, y = r.uniform(8, 36), r.uniform(4, 9)
+        c.ellipse(x, y, 1.6, 1.2, F_LIGHT + (255,))
+    t = snap(c.down(), [F_DARK, F_MID, F_LIGHT])
+    return outline(t, F_MORTAR, grow=False)
+
+
+def bed():
+    w, h = 30, 12
+    c = SS(w, h)
+    c.rect(1, 6, 28, 6, (150, 118, 64, 255))               # straw mattress
+    c.rect(1, 6, 28, 1.4, (196, 160, 90, 255))
+    c.rect(9, 3.5, 19, 5, (70, 92, 150, 255))              # patched blanket
+    c.rect(9, 3.5, 19, 1.2, (104, 128, 186, 255))
+    c.rect(15, 5, 5, 3, (150, 80, 70, 255))                # patch
+    c.ellipse(5, 5.5, 3.5, 2.2, (220, 214, 200, 255))     # pillow
+    t = snap(c.down(), [(150, 118, 64), (196, 160, 90), (70, 92, 150), (104, 128, 186), (150, 80, 70), (220, 214, 200)])
+    for x in range(2, 28, 3):
+        if t[10, x, 3]:
+            t[10, x] = col((110, 84, 44))
+    return outline(t, F_MORTAR, grow=False)
+
+
+def drawings():
+    """Chalk drawings a lonely child made on her wall: the sun she never saw,
+    a flower, two people holding hands, and a big scribbled shadow."""
+    w, h = 64, 36
+    t = rgba(w, h)
+    chalk, sun, pink = col((226, 220, 200), 200), col((240, 206, 96), 220), col((226, 150, 160), 210)
+
+    def dot(x, y, cc):
+        if 0 <= x < w and 0 <= y < h:
+            t[int(y), int(x)] = cc
+
+    def line(x0, y0, x1, y1, cc):
+        n = int(max(abs(x1 - x0), abs(y1 - y0))) + 1
+        for i in range(n):
+            k = i / max(1, n - 1)
+            dot(round(x0 + (x1 - x0) * k), round(y0 + (y1 - y0) * k), cc)
+
+    # sun
+    for a in range(0, 360, 12):
+        r = math.radians(a)
+        dot(9 + 4 * math.cos(r), 8 + 4 * math.sin(r), sun)
+    for a in range(0, 360, 45):
+        r = math.radians(a)
+        line(9 + 6 * math.cos(r), 8 + 6 * math.sin(r), 9 + 8 * math.cos(r), 8 + 8 * math.sin(r), sun)
+    # flower
+    line(22, 34, 22, 27, chalk)
+    line(22, 31, 24, 29, chalk)
+    for a in range(0, 360, 40):
+        r = math.radians(a)
+        dot(22 + 2 * math.cos(r), 24 + 2 * math.sin(r), pink)
+    dot(22, 24, sun)
+    # two stick figures holding hands (a tall one and a small one with long hair)
+    for (x, top, hgt, hair) in ((34, 16, 16, False), (42, 21, 11, True)):
+        for a in range(0, 360, 30):
+            r = math.radians(a)
+            dot(x + 2 * math.cos(r), top + 2 * math.sin(r), chalk)
+        line(x, top + 2, x, top + hgt - 5, chalk)
+        line(x, top + hgt - 5, x - 2, top + hgt, chalk)
+        line(x, top + hgt - 5, x + 2, top + hgt, chalk)
+        if hair:
+            line(x - 2, top, x - 3, top + 6, sun)
+            line(x + 2, top, x + 3, top + 6, sun)
+    line(34, 22, 38, 25, chalk)
+    line(38, 25, 42, 25, chalk)
+    # the big scribbled shadow watching them
+    r = np.random.default_rng(3)
+    for _ in range(170):
+        x, y = r.uniform(50, 62), r.uniform(6, 34)
+        if (x - 56) ** 2 / 36 + (y - 18) ** 2 / 170 < 1:
+            dot(x, y, col((30, 24, 40), 230))
+    dot(54, 12, sun); dot(58, 12, sun)
+    return t
+
+
+def candle():
+    t = rgba(8, 10)
+    fill(t, 0, 8, 8, 2, IRON[1])
+    t[8, 0:8] = col(IRON[2])
+    fill(t, 2, 2, 4, 6, (236, 226, 196))
+    t[2:8, 2] = col((255, 246, 222))
+    t[2:8, 5] = col((190, 176, 150))
+    t[1, 3:5] = col((226, 214, 184))
+    t[0, 3] = col((60, 44, 40))
+    return outline(t, F_MORTAR, grow=False)
+
+
 def all_items():
     items = {}
     for i in range(4):
@@ -443,6 +565,12 @@ def all_items():
     items["door_frame"] = door_frame()
     items["door"] = door_slab()
     items["sign"] = sign()
+    items["rope"] = rope()
+    items["hole"] = hole()
+    items["rubble"] = rubble()
+    items["bed"] = bed()
+    items["drawings"] = drawings()
+    items["candle"] = candle()
     return items
 
 

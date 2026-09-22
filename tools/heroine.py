@@ -275,6 +275,8 @@ def frames():
     F["down"] = draw(root=-90, pos=(AX + 4, 34.5), thigh_f=D(25), knee_f=D(45), thigh_b=D(10), knee_b=D(30), eyes="closed")
     F["sit"] = draw(crouch=4.5, lean=-8, thigh_f=D(88), knee_f=D(20), thigh_b=D(80), knee_b=D(35), skirt=1.5,
                     pos=(AX, STAND_HIP_Y + 4.5))
+    # holding out her hand to take Grey's
+    F["hand"] = draw(lean=4, arms=dict(arm_f=D(76), elb_f=D(6), arm_b=D(14), elb_b=D(10)))
     F["joy"] = draw(bob=-1, thigh_b=D(-15), knee_b=D(50), eyes="closed",
                     arms=dict(arm_f=D(160), elb_f=D(10), arm_b=D(150), elb_b=D(10)))
     return F

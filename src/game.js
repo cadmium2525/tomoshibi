@@ -16,7 +16,8 @@ class Game {
     this.ui = {
       wrap: document.getElementById('wrap'), msg: document.getElementById('msg'), toast: document.getElementById('toast'),
       center: document.getElementById('center'), hud: document.getElementById('hud'), mode: document.getElementById('mode'),
-      bubbles: document.getElementById('bubbles'),
+      bubbles: document.getElementById('bubbles'), chapter: document.getElementById('chapter'),
+      skip: document.getElementById('skip'),
     };
     this.bubbleEls = new Map();
     this.stats = { time: 0, grabs: 0, kills: 0, retries: 0 };
@@ -33,7 +34,11 @@ class Game {
       Sfx.unlock();
       const btn = e.target.closest('button');
       if (btn && btn.dataset.cmd) { e.preventDefault(); this.menuCommand(btn.dataset.cmd); return; }
-      if (this.state !== 'pause') Input.tap('start');
+      if (this.state === 'cutscene') Input.tap('jump');     // advance the letter
+      else if (this.state !== 'pause') Input.tap('start');
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (this.state === 'cutscene' && !e.target.closest('#touch') && !e.target.closest('#center')) Input.tap('jump');
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
@@ -81,6 +86,8 @@ class Game {
       this.hero.lastSafe = { x: this.hero.x, y: this.hero.y };
       this.flags.plateHint = true;
     }
+    this.black = 0; this.wallShadow = null;
+    this.afterPrologue();
     this.hero.checkGround(this.world); this.heroine.checkGround(this.world);
     this.cam = { x: 0, y: 0, lx: 0 };
     this.updateCamera(true);
@@ -165,9 +172,12 @@ class Game {
         this.t++;
         if (Input.pressed('jump') || Input.pressed('start') || Input.pressed('attack')) {
           Sfx.unlock(); Sfx.play('select'); Sfx.startBgm();
-          this.state = 'play'; this.hideCenter(); this.ui.hud.style.display = 'flex';
-          this.say(this.heroine, 'グレイさん、置いていかないでね。', 'her', 150);
+          this.hideCenter();
+          this.startPrologue();
         }
+        return;
+      case 'cutscene':
+        this.updateCutscene();
         return;
       case 'pause':
         if (Input.pressed('start')) this.menuCommand('resume');
@@ -218,6 +228,156 @@ class Game {
     this.updateCamera(false);
     this.updateMessages();
     if (this.shake > 0) this.shake -= 0.25;
+  }
+
+  // ---- prologue / cutscenes -----------------------------------------------------
+  startPrologue() {
+    this.state = 'cutscene';
+    this.ui.hud.style.display = 'none';
+    this.ui.skip.style.display = 'block';
+    this.cut = new Cutscene(this, prologueScript(), () => this.finishPrologue());
+  }
+
+  // everything as it is after the prologue (also used when retrying)
+  afterPrologue() {
+    const g0 = this.gates.find((g) => g.id === 'g0');
+    if (g0) { g0.locked = true; g0.open = 1; }
+    for (const d of this.world.decor) {
+      if (d.type === 'rope') { d.fallen = true; d.fallT = 99; }
+      if (d.type === 'rubble') d.shown = true;
+    }
+  }
+
+  setupPrologue() {
+    const g0 = this.gates.find((g) => g.id === 'g0');
+    g0.locked = false; g0.open = 0;
+    for (const d of this.world.decor) {
+      if (d.type === 'rope') { d.fallen = false; d.fallT = 0; }
+      if (d.type === 'rubble') d.shown = false;
+    }
+    const hero = this.hero, h = this.heroine;
+    hero.setState('scripted'); h.setState('scripted');
+    hero.x = 17.5 * TILE; hero.y = 4 * TILE; hero.facing = -1; hero.kinematic = true; hero.pose = 'jump7';
+    h.x = 6 * TILE + 4; h.y = 16 * TILE; h.facing = -1; h.pose = null; h.vx = h.vy = 0;
+    this.wallShadow = { scale: 1.9, alpha: 0.62, wave: false, grow: 0 };
+    this.black = 1;
+    this.cam.x = 0; this.cam.y = 4.5 * TILE;
+  }
+
+  finishPrologue() {
+    if (this.state !== 'cutscene') return;
+    this.cut = null;
+    this.afterPrologue();
+    const hero = this.hero, h = this.heroine;
+    hero.setState('normal'); hero.pose = null; hero.kinematic = false; hero.x = 9.7 * TILE; hero.y = 16 * TILE; hero.facing = 1;
+    h.setState('normal'); h.pose = null; h.x = 8.1 * TILE; h.y = 16 * TILE; h.facing = 1; h.mode = 'follow';
+    hero.vx = hero.vy = h.vx = h.vy = 0;
+    hero.checkGround(this.world); h.checkGround(this.world);
+    hero.lastSafe = { x: hero.x, y: hero.y };
+    this.wallShadow = null; this.black = 0; this.shake = 0; this.fade = 0;
+    this.hideTalk(); this.hideCenter();
+    this.ui.chapter.className = '';
+    this.ui.skip.style.display = 'none';
+    this.ui.hud.style.display = 'flex';
+    this.state = 'play';
+  }
+
+  updateCutscene() {
+    this.t++;
+    if (Input.pressed('start')) { this.finishPrologue(); return; }
+    this.cut.update();
+    if (!this.cut) return;
+    for (const a of [this.hero, this.heroine]) {
+      if (a.kinematic) continue;
+      a.physics(this.world);
+      if (a.onGround) a.animDist += Math.abs(a.vx);
+    }
+    const h = this.heroine;
+    h.t++; if (h.iconT > 0) h.iconT--;
+    h.scriptFrame = h.pose || (Math.abs(h.vx) > 0.1 ? 'walk' + (Math.floor(h.animDist / 2.8) % 8) : 'idle' + (Math.floor(h.t / 40) % 2));
+    this.hero.t++;
+    const ws = this.wallShadow;
+    if (ws && ws.grow) {
+      ws.grow++;
+      ws.scale = Math.min(4.6, ws.scale + 0.03);
+      ws.alpha = Math.min(0.85, ws.alpha + 0.006);
+      if (ws.grow % 20 === 0) this.shake = 3;
+    }
+    for (const d of this.world.decor) if (d.type === 'rope' && d.fallen) d.fallT++;
+    if (this.fade > 0) this.fade = Math.max(0, this.fade - 0.025);     // flash
+    this.particles.update();
+    for (const g of this.gates) g.update(this);
+    if (this.shake > 0) this.shake -= 0.25;
+  }
+
+  // walk an actor to x; true when arrived
+  cutWalk(a, tx, speed) {
+    const dx = tx - a.x;
+    if (Math.abs(dx) < 1.2) { a.vx = 0; return true; }
+    a.facing = sign(dx);
+    a.vx = sign(dx) * Math.min(speed, Math.abs(dx));
+    return false;
+  }
+
+  awaken() {
+    Sfx.play('emerge'); Sfx.play('door');
+    this.wallShadow.grow = 1;
+    this.heroine.emote('!', 90);
+    this.fade = 0.8;
+  }
+
+  shatterShadow() {
+    const h = this.heroine, ws = this.wallShadow;
+    Sfx.play('kill'); Sfx.play('block');
+    this.shake = 5;
+    for (let i = 0; i < 70; i++) {
+      this.particles.add({ x: h.x - 20 + rand(-30, 20), y: h.y - rand(0, 110), vx: rand(1.5, 4.5), vy: rand(-1.2, 0.8),
+        life: rand(40, 80), col: i % 3 ? '#140a20' : '#3a2058', size: 2 + (i % 2), shrink: true, drag: 0.99 });
+    }
+    // the cave-in: the rope comes down with the rubble
+    for (const d of this.world.decor) {
+      if (d.type === 'rope') { d.fallen = true; d.fallT = 0; }
+      if (d.type === 'rubble') d.shown = true;
+    }
+    for (let i = 0; i < 26; i++) {
+      this.particles.add({ x: 17 * TILE + rand(-10, 20), y: 6 * TILE + rand(-4, 20), vx: rand(-0.6, 0.6), vy: rand(0, 1.5), g: 0.2,
+        life: rand(30, 60), col: i % 2 ? '#6a6270' : '#3a3448', size: 2 });
+    }
+    ws.alpha = 0; this.wallShadow = null;
+    this.say(this.heroine, 'きゃっ……！', 'cry', 60);
+  }
+
+  // Lumina's shadow, cast on her cell wall by Marta's candle
+  drawWallShadow(ctx, cx, cy) {
+    const ws = this.wallShadow, h = this.heroine;
+    const frame = ws.wave ? 'reachup' + (Math.floor(this.t / 14) % 2) : h.frame();
+    const r = Sheets.heroine.f[frame];
+    if (!r) return;
+    const [sx, sy, w, hh, ax, ay] = r;
+    const flick = 1 + Math.sin(this.t * 0.35) * 0.02;
+    const s = ws.scale * flick;
+    const fx = Math.round(h.x - cx - 14 - (s - 1) * 6), fy = Math.round(h.y - cy);
+    ctx.save();
+    ctx.globalAlpha = ws.alpha;
+    ctx.translate(fx, fy);
+    ctx.scale(h.facing < 0 ? -s : s, s);
+    ctx.drawImage(Sheets.heroine.dark, sx, sy, w, hh, -ax, -ay, w, hh);
+    ctx.restore();
+  }
+
+  showTalk(name, text) {
+    this.ui.msg.innerHTML = `<span class="name">${name}：</span>${text}<span class="more">▼</span>`;
+    this.ui.msg.style.display = 'block';
+    this.shownMsg = null;
+  }
+  hideTalk() { this.ui.msg.style.display = 'none'; this.shownMsg = null; }
+
+  showChapter(num, title) {
+    const c = this.ui.chapter;
+    c.innerHTML = `<div class="num">${num}</div><div class="title">${title}</div>`;
+    c.className = '';
+    void c.offsetWidth;          // restart the CSS animation
+    c.className = 'show';
   }
 
   // ---- interactions ----------------------------------------------------------
@@ -423,6 +583,7 @@ class Game {
     if (!d.opening) {
       if (hNear && !sealed) {
         d.opening = true; Sfx.play('door');
+        this.notify('door_open', 200);
         this.say(h, '光が…！', 'her', 80);
       } else if (heroNear && sealed && !this.flags.sealMsg) {
         this.flags.sealMsg = true; this.notify('door_sealed', 150);
@@ -456,10 +617,12 @@ class Game {
       for (const b of this.bubbleEls.values()) b.t = 0;
       const s = this.stats;
       const sec = Math.floor(s.time / 60);
-      this.showCenter(`<h1>STAGE 1 CLEAR</h1><h2>忘れられた地下聖堂 を 抜けた</h2>
+      this.showCenter(`<h1>第1章 クリア</h1><h2>忘れられた地下聖堂</h2>
+        <div class="quote">「これが……そと？」<br>「ああ。――夜明けだ。」</div>
         <div class="keys"><b>クリアタイム</b>${Math.floor(sec / 60)}分${String(sec % 60).padStart(2, '0')}秒<br>
-        <b>さらわれた回数</b>${s.grabs} 回<br><b>祓った影</b>${s.kills} 体<br><b>やり直し</b>${s.retries} 回</div>
-        <div class="blink" style="margin-top:1.4em">${Touch.enabled ? 'タップで' : 'Z：'}タイトルへ</div>`, false, true);
+        <b>さらわれた回数</b>${s.grabs} 回<br><b>光へ還した影</b>${s.kills} 体<br><b>やり直し</b>${s.retries} 回</div>
+        <div style="margin-top:1em;font-size:0.8em">第2章「薄明の森」へ つづく</div>
+        <div class="blink" style="margin-top:1em">${Touch.enabled ? 'タップで' : 'Z：'}タイトルへ</div>`, false, true);
     }
   }
 
@@ -525,7 +688,7 @@ class Game {
     for (const [a, b] of this.bubbleEls) {
       if (b.delay > 0) { b.delay--; continue; }
       if (b.t <= 0) { b.el.style.display = 'none'; continue; }
-      if (this.state === 'play' || this.state === 'title') b.t--;
+      if (this.state === 'play' || this.state === 'title' || this.state === 'cutscene') b.t--;
       const top = a.y - a.h - (a === this.heroine && a.state === 'carried' ? -4 : 12);
       b.el.style.display = 'block';
       // keep the bubble inside the screen horizontally
@@ -539,17 +702,17 @@ class Game {
   keysHtml() {
     if (Touch.enabled) {
       return `<div class="keys"><b>スティック</b>移動（大きく倒すとダッシュ）<br><b>ジャンプ</b>ジャンプ<br>
-        <b>杖</b>杖で攻撃（影を打ち払う）<br><b>呼ぶ</b>ルミナに「待て」/「おいで」<br>
+        <b>灯竿</b>灯竿を振る（影を光へ還す）<br><b>呼ぶ</b>ルミナに「待て」/「おいで」<br>
         <b>スティック↓</b>長押しで手を差し伸べる（受け止める・引き上げる）<br><b>スティック↑</b>レバーを引く<br>
         <b>❚❚</b>ポーズ</div>`;
     }
     return `<div class="keys"><b>←→</b>移動（Shift / 2度押しでダッシュ）<br><b>Z / Space</b>ジャンプ<br>
-      <b>X</b>杖で攻撃（影を打ち払う）<br><b>C</b>ルミナに「待て」/「おいで」<br>
+      <b>X</b>灯竿を振る（影を光へ還す）<br><b>C</b>ルミナに「待て」/「おいで」<br>
       <b>↓（長押し）</b>手を差し伸べる（受け止める・引き上げる）<br><b>↑</b>レバーを引く<br>
       <b>Enter</b>ポーズ　<b style="min-width:0">M</b> 音 ON/OFF</div>`;
   }
   showTitle() {
-    this.showCenter(`<img class="portrait" src="icons/icon-512.png" alt=""><h1>灯のルミナ</h1><h2>STAGE 1 ─ 忘れられた地下聖堂</h2>
+    this.showCenter(`<img class="portrait" src="icons/icon-512.png" alt=""><h1>灯のルミナ</h1><h2>第1章 ─ 忘れられた地下聖堂</h2>
       <div class="blink">${Touch.enabled ? 'タップでスタート' : 'PRESS Z / ENTER'}</div>${this.keysHtml()}
       ${document.body.classList.contains('portrait') ? '<div style="margin-top:1.2em;font-size:0.75em;color:#ffe08a">📱 横向きにすると 画面が大きくなります</div>' : ''}`, true);
   }
@@ -578,10 +741,12 @@ class Game {
     for (const g of this.gates) g.draw(ctx, cx, cy);
     for (const p of this.plates) p.draw(ctx, cx, cy, T);
     w.drawFront(ctx, cx, cy);
+    w.drawDecorFront(ctx, cx, cy);
     for (const p of this.portals) p.draw(ctx, cx, cy);
     for (const b of this.blocks) b.draw(ctx, cx, cy);
 
     const h = this.heroine;
+    if (this.wallShadow) this.drawWallShadow(ctx, cx, cy);
     if (h.state !== 'carried') h.draw(ctx, cx, cy);
     for (const s of this.shadows) {
       s.draw(ctx, cx, cy);
@@ -613,6 +778,7 @@ class Game {
       ctx.fillStyle = `rgba(0,0,0,${clamp(k, 0, 1)})`; ctx.fillRect(0, 0, VW, VH);
     }
     if (this.fade > 0) { ctx.fillStyle = `rgba(255,250,236,${this.fade})`; ctx.fillRect(0, 0, VW, VH); }
+    if (this.black > 0) { ctx.fillStyle = `rgba(0,0,0,${this.black})`; ctx.fillRect(0, 0, VW, VH); }
     if (this.state === 'clear') { ctx.fillStyle = '#fffaec'; ctx.fillRect(0, 0, VW, VH); }
     this.drawBubbles(cx, cy);
   }
@@ -638,6 +804,7 @@ class Game {
     for (const d of this.world.decor) {
       if (d.type === 'torch') L.push({ x: d.x + 8, y: d.y + 2, r: 62 + Math.sin(T * 0.21 + d.x) * 2 + Math.sin(T * 0.53 + d.y) * 1.5, a: 0.95, col: 'rgba(255,150,60,0.13)' });
       if (d.type === 'window') L.push({ x: d.x + 16, y: d.y + 20, r: 44, a: 0.5 });
+      if (d.type === 'candle') L.push({ x: d.x + 4, y: d.y - 20, r: 96 + Math.sin(T * 0.4) * 2, a: 0.9, col: 'rgba(255,170,80,0.16)' });
     }
     const h = this.heroine, hero = this.hero;
     L.push({ x: hero.x, y: hero.y - 20, r: 58, a: 0.55 });
@@ -706,7 +873,7 @@ class Game {
   }
 
   drawHud(ctx, cx, cy) {
-    if (this.state === 'title' || this.state === 'clear' || this.state === 'ending') return;
+    if (this.state === 'title' || this.state === 'clear' || this.state === 'ending' || this.state === 'cutscene') return;
     const h = this.heroine;
     // heart: calm / danger
     const danger = h.state === 'carried' ? 1 : clamp(this.dangerT / 210, 0, 1);
@@ -745,5 +912,5 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !/de
 }
 loadSheets().then(() => {
   window.game = new Game();
-  if (location.search.includes('debug')) { const s = document.createElement('script'); s.src = 'tools/debug_helper.js'; document.body.appendChild(s); }
+  if (location.search.includes('debug')) { const s = document.createElement('script'); s.src = 'tools/debug_helper.js?' + Date.now(); document.body.appendChild(s); }
 });

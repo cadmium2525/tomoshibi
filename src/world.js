@@ -137,7 +137,36 @@ class World {
           drawTile(ctx, 'sconce', x + 4, y + 6);
           drawTile(ctx, 'flame' + (Math.floor(t / 6 + d.x) % 4), x + 4, y - 5);
           break;
+        case 'bed': case 'drawings':
+          drawTile(ctx, d.type, x, y);
+          break;
+        case 'candle': {
+          drawTile(ctx, 'candle', x, y);
+          const f = Math.floor(t / 7 + d.x) % 3;
+          ctx.fillStyle = '#ffb040'; ctx.fillRect(Math.round(x) + 3, Math.round(y) - 3 - (f === 1 ? 1 : 0), 2, 3);
+          ctx.fillStyle = '#fff4c0'; ctx.fillRect(Math.round(x) + 3 + (f === 2 ? 1 : 0), Math.round(y) - 1, 1, 1);
+          break;
+        }
+        case 'rope':
+          if (d.fallen && d.fallT > 36) break;
+          ctx.globalAlpha = d.fallen ? 1 - d.fallT / 36 : 1;
+          for (let i = 0; i < d.len; i++) {
+            const drop = d.fallen ? d.fallT * d.fallT * 0.12 : 0;
+            drawTile(ctx, 'rope', x + (d.fallen ? Math.sin(i + d.fallT * 0.3) * 2 : Math.sin(t * 0.03 + i * 0.4) * 0.6), y + i * 16 + drop);
+          }
+          ctx.globalAlpha = 1;
+          break;
       }
+    }
+  }
+
+  // decor drawn over the foreground tiles (ceiling hole, fallen rubble)
+  drawDecorFront(ctx, cx, cy) {
+    for (const d of this.decor) {
+      const x = d.x - cx, y = d.y - cy;
+      if (x < -60 || x > VW + 20 || y < -40 || y > VH + 20) continue;
+      if (d.type === 'hole') drawTile(ctx, 'hole', x, y);
+      if (d.type === 'rubble' && d.shown) drawTile(ctx, 'rubble', x, y);
     }
   }
 }

@@ -22,27 +22,42 @@ function buildStage1() {
   // cell (tx, ty) is the open cell an object stands in; feet at (ty+1)*16
   const at = (tx, ty, dx = 8) => ({ x: tx * TILE + dx, y: (ty + 1) * TILE });
   const ent = (type, tx, ty, o = {}) => { const e = Object.assign({ type }, at(tx, ty), o); ents.push(e); return e; };
-  const dec = (type, tx, ty, o = {}) => decor.push(Object.assign({ type, x: tx * TILE, y: ty * TILE }, o));
+  const dec = (type, tx, ty, o = {}) => {
+    const d = Object.assign({ type, x: tx * TILE + (o.ox || 0), y: ty * TILE + (o.oy || 0) }, o);
+    decor.push(d);
+    return d;
+  };
 
-  // ===== Zone 1: entrance corridor (tutorial) ===============================
+  // ===== Zone 1: Lumina's cell and the entrance corridor (tutorial) ========
   carve(2, 6, 45, 14);
-  carve(2, 15, 12, 15);                 // start area is one step lower (surface 16)
+  carve(2, 15, 12, 15);                 // her cell is one step lower (surface 16)
+  fill(13, 6, 13, 11);                  // cell wall; its barred door (g0) below
   carve(19, 15, 19, 16);                // small ditch (surface 17)
   fill(29, 6, 31, 11);                  // lintel above gate 1
-  ent('hero', 5, 15);
-  ent('heroine', 3, 15);
-  ent('sign', 7, 15, { text: 'sign_move' });
-  ent('sign', 11, 15, { text: 'sign_follow' });
+  ent('hero', 9, 15);                   // where the prologue leaves them
+  ent('heroine', 7, 15);
+  ent('gate', 13, 12, { id: 'g0' });    // opened with Marta's key in the prologue
+  ent('sign', 9, 15, { text: 'hint_move', hidden: true });
+  ent('sign', 16, 14, { text: 'hint_follow', hidden: true });
   ent('sign', 22, 14, { text: 'sign_wait' });
   ent('plate', 25, 14, { id: 'p1', gates: ['g1'] });
   ent('gate', 30, 12, { id: 'g1', dx: 0 });
   ent('sign', 33, 14, { text: 'sign_lever' });
   ent('lever', 35, 14, { id: 'l1', gates: ['g1'] });
   ent('shrine', 39, 14, { id: 's1' });
-  dec('window', 15, 8); dec('window', 36, 7);
-  dec('torch', 9, 11); dec('torch', 21, 10); dec('torch', 27, 10); dec('torch', 42, 10);
-  dec('banner', 4, 8); dec('banner', 33, 7);
-  dec('pillar', 12, 6, { to: 14 }); dec('pillar', 24, 6, { to: 14 });
+  // the cell: a straw bed, the drawings she made on her wall, Marta's candle
+  dec('bed', 2, 15, { ox: 6, oy: 4 });
+  dec('drawings', 5, 9, { ox: 2 });
+  dec('candle', 10, 15, { ox: 4, oy: 6, light: true });
+  dec('banner', 4, 7);
+  // the shaft Grey climbed down; it caves in when the shadows wake
+  dec('hole', 16, 5, { ox: -4, oy: 6 });
+  dec('rope', 17, 6, { ox: 6, len: 9 });
+  dec('rubble', 16, 14, { ox: -6, oy: 6 });
+  dec('window', 36, 7);
+  dec('torch', 21, 10); dec('torch', 27, 10); dec('torch', 42, 10);
+  dec('banner', 33, 7);
+  dec('pillar', 24, 6, { to: 14 });
 
   // ===== Zone 2: descent shaft ==============================================
   carve(46, 6, 57, 33);
@@ -114,19 +129,27 @@ function buildStage1() {
   return { W, H, solid, noBg, ents, decor, name: '忘れられた地下聖堂' };
 }
 
+const N = (who) => `<span class="name">${who}：</span>`;
 const TEXT = {
-  sign_move: '<span class="name">石碑：</span>{move} で移動。{dash}でダッシュ、{jump} でジャンプ。',
-  sign_follow: '<span class="name">石碑：</span>少女ルミナは あなたの後をついてくる。1段の段差や 小さな溝なら 自分で越えられる。',
-  sign_wait: '<span class="name">石碑：</span>{call} で ルミナに「待て」「おいで」を伝えられる。この石板は ルミナが乗ったときにだけ反応する。',
-  sign_lever: '<span class="name">石碑：</span>レバーの前で {up}。一度引けば 門は開いたままになる。',
-  sign_catch: '<span class="name">石碑：</span>{down} を押し続けると 手を差し伸べる。高い所や 崖の向こうのルミナは、あなたが受け止めてあげなければ 跳べない。',
-  sign_gap: '<span class="name">石碑：</span>広い崖は ダッシュジャンプで越えよう。向こう岸で ルミナの方を向いて {down} … 彼女は あなたを信じて 跳ぶ。',
-  sign_fight: '<span class="name">石碑：</span>ルミナから離れると 影が現れ、彼女を闇へ連れ去ろうとする。{attack} で杖を振り、影を打ち払え！',
-  sign_pull: '<span class="name">石碑：</span>2段の段差は ルミナには登れない。上から {down} で 手を差し伸べ、引き上げてあげよう。',
-  sign_block: '<span class="name">石碑：</span>2つの石板は 同じ門につながっている。重たいものでも 石板は沈むだろうか…？（壁に押しつけた石は 崩れて元の場所に戻る）',
-  plate_hero: '<span class="name">グレイ：</span>…びくともしない。この石板は ルミナにしか応えないようだ。',
-  door_sealed: '<span class="name">グレイ：</span>影の気配が 扉を封じている…！',
-  hint_danger: '<span class="name">グレイ：</span>しまった、ルミナから離れすぎた…！ 影が彼女を狙っている。急いで戻らねば！',
-  hint_stuck: '<span class="name">ヒント：</span>行き詰まったら ポーズ（{pause}）から「最後の灯籠から やり直す」を選べる。',
-  hint_grab: '<span class="name">グレイ：</span>ルミナ！ 渦に沈められる前に、{attack} で影を打て！',
+  hint_move: N('ヒント') + '{move} で移動、{dash}でダッシュ、{jump} でジャンプ。',
+  hint_follow: N('ヒント') + 'ルミナは あなたの後をついてくる。1段の段差や 小さな溝なら 自分で越えられる。',
+  sign_wait: N('石碑') + '「灯の巫女 此の石に立つとき 門は開かれん」<br>' + N('ヒント') +
+    '{call} で ルミナに「待て」「おいで」を伝えられる。石板は ルミナが乗ったときにだけ応える。',
+  sign_lever: N('石碑') + '「門番の梃子」<br>' + N('ヒント') + 'レバーの前で {up}。一度引けば 門は開いたままになる。',
+  sign_catch: N('石碑') + '「光を抱く者 落ちるを恐れず」<br>' + N('ヒント') +
+    '{down} を押し続けると 手を差し伸べる。高い所や 崖の向こうのルミナは、受け止めてあげなければ 跳べない。',
+  sign_gap: N('石碑') + '「奈落の回廊」<br>' + N('ヒント') +
+    '広い崖は ダッシュジャンプで越えよう。向こう岸で ルミナの方を向いて {down} … 彼女は あなたを信じて 跳ぶ。',
+  sign_fight: N('石碑') + '「影は灯の子 火にて散らし 光へ還すべし」<br>' + N('ヒント') +
+    'ルミナから離れると 影が現れ、彼女を闇へ連れ戻そうとする。{attack} で灯竿を振り、影を光へ還せ！',
+  sign_pull: N('石碑') + '「高きに登れぬ者あらば 手を差し伸べよ」<br>' + N('ヒント') +
+    '2段の段差は ルミナには登れない。上から {down} で 引き上げてあげよう。',
+  sign_block: N('石碑') + '「二つの石 一つの門」<br>' + N('ヒント') +
+    '2つの石板は 同じ門につながっている。重たい石でも 石板は沈むだろうか…？（壁に押しつけた石は 崩れて元の場所に戻る）',
+  plate_hero: N('グレイ') + '…びくともしない。この石板は ルミナにしか応えないようだ。',
+  door_sealed: N('グレイ') + '影の気配が 扉を封じている…！',
+  door_open: N('グレイ') + '……この扉は、あの子の光にしか 応えないのか。',
+  hint_danger: N('グレイ') + 'しまった、ルミナから離れすぎた…！ 心細さに 彼女の光が揺らいでいる。急いで戻らねば！',
+  hint_stuck: N('ヒント') + '行き詰まったら ポーズ（{pause}）から「最後の灯籠から やり直す」を選べる。',
+  hint_grab: N('グレイ') + 'ルミナ！ 渦に沈められる前に、{attack} で灯竿を振れ！',
 };

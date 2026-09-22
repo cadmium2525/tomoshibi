@@ -21,6 +21,10 @@ class H(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"ok")
 
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store")     # always serve fresh files while developing
+        super().end_headers()
+
     def log_message(self, *a):
         pass
 

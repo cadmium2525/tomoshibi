@@ -139,9 +139,9 @@ class Shrine {
 }
 
 class Sign {
-  constructor(e) { this.x = e.x; this.y = e.y; this.text = e.text; }
-  near(hero) { return Math.abs(hero.x - this.x) < 18 && Math.abs(hero.y - this.y) < 26; }
-  draw(ctx, cx, cy) { drawTile(ctx, 'sign', this.x - 7 - cx, this.y - 16 - cy); }
+  constructor(e) { this.x = e.x; this.y = e.y; this.text = e.text; this.hidden = !!e.hidden; }
+  near(hero) { return Math.abs(hero.x - this.x) < (this.hidden ? 40 : 18) && Math.abs(hero.y - this.y) < 26; }
+  draw(ctx, cx, cy) { if (!this.hidden) drawTile(ctx, 'sign', this.x - 7 - cx, this.y - 16 - cy); }
 }
 
 class Door {

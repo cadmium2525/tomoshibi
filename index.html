@@ -68,6 +68,24 @@
   #center.light .keys { color: #3a2a14; }
   #center.light .keys b { color: #9a5a10; }
   @keyframes blink { 50% { opacity: 0; } }
+  #center .quote { margin: 0.2em 0 0.4em; line-height: 1.8; color: #6a4a20; }
+  /* Marta's letter */
+  .letter { background: #efe3c4; color: #3a2a18; border: 0.2em solid #8a6a3a; border-radius: 0.3em; text-shadow: none;
+            padding: 0.6em 1.6em; max-width: 30em; text-align: left; line-height: 1.8; font-size: 0.82em;
+            box-shadow: 0 0 2em rgba(0, 0, 0, 0.7), inset 0 0 2em rgba(140, 100, 50, 0.25); }
+  .letter p { margin: 0.7em 0; }
+  .letter .sig { text-align: right; }
+  .letter .more, #msg .more { float: right; animation: blink 1s steps(2) infinite; margin-left: 0.5em; }
+  /* chapter title card */
+  #chapter { position: fixed; left: 0; right: 0; top: 38%; text-align: center; pointer-events: none; z-index: 6; opacity: 0;
+             font-size: clamp(14px, 4vmin, 34px); text-shadow: 0.08em 0.08em 0 #000, 0 0 0.6em rgba(255, 220, 140, 0.5); }
+  #chapter .num { font-size: 0.7em; letter-spacing: 0.3em; color: #b8c4ff; }
+  #chapter .title { font-size: 1.4em; letter-spacing: 0.15em; color: #ffe9a8; }
+  #chapter.show { animation: chapterCard 2.9s ease forwards; }
+  @keyframes chapterCard { 0% { opacity: 0; transform: translateY(0.4em); } 20%, 75% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  #skip { position: fixed; right: calc(env(safe-area-inset-right, 0px) + 2vmin); bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5vmin);
+          font-size: clamp(11px, 2.2vmin, 15px); color: rgba(255, 255, 255, 0.55); display: none; z-index: 6; pointer-events: none; }
+  body.touch #skip { top: calc(env(safe-area-inset-top, 0px) + 2vmin); bottom: auto; right: calc(env(safe-area-inset-right, 0px) + 14vmin); }
 
   /* touch controls */
   #touch { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 4; }
@@ -109,12 +127,14 @@
   </div>
 </div>
 <div id="msg" class="win"></div>
+<div id="chapter"></div>
+<div id="skip">Enter / ❚❚：スキップ</div>
 <div id="center"></div>
 <div id="touch">
   <div id="pad"><span class="ar" style="left:50%;top:12%">▲</span><span class="ar" style="left:50%;top:88%">▼</span>
     <span class="ar" style="left:12%;top:50%">◀</span><span class="ar" style="left:88%;top:50%">▶</span><div id="knob"></div></div>
   <button class="tb" id="bJump" data-a="jump">ジャンプ</button>
-  <button class="tb" id="bAtk" data-a="attack">杖</button>
+  <button class="tb" id="bAtk" data-a="attack">灯竿</button>
   <button class="tb" id="bCall" data-a="call">呼ぶ</button>
   <button class="sys" id="bPause" aria-label="ポーズ">❚❚</button>
   <button class="sys" id="bFull" aria-label="全画面">⛶</button>
@@ -127,6 +147,7 @@
 <script src="src/actors.js"></script>
 <script src="src/props.js"></script>
 <script src="src/touch.js"></script>
+<script src="src/cutscene.js"></script>
 <script src="src/game.js"></script>
 </body>
 </html>
