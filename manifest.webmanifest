@@ -1,0 +1,18 @@
+{
+  "name": "灯のルミナ",
+  "short_name": "ルミナ",
+  "description": "少女ルミナを連れて地下聖堂を進む、SFC風の謎解きアクション",
+  "lang": "ja",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#07060c",
+  "theme_color": "#0e0c1a",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

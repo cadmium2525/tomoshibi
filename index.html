@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>灯のルミナ</title>
+<meta name="description" content="少女ルミナを連れて地下聖堂を進む、SFC風の謎解きアクション">
+<meta name="theme-color" content="#0e0c1a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="灯のルミナ">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: dark; --u: 8px; }
+  html, body { margin: 0; height: 100%; background: #07060c; overflow: hidden; }
+  body { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+         font-family: "DotGothic16", "MS Gothic", "Osaka-Mono", monospace; color: #f4f0ff;
+         touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+         -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+  body.portrait { align-items: flex-start; padding-top: env(safe-area-inset-top, 0px); }
+  #wrap { position: relative; font-size: var(--u); }
+  #screen { display: block; image-rendering: pixelated; image-rendering: crisp-edges; background: #000; }
+  #ui { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .px { position: absolute; }
+  /* SFC style message window */
+  .win { background: linear-gradient(#2b3c9c, #101a5c); border: 0.25em solid #e8e8f8;
+         border-radius: 0.5em; box-shadow: 0 0 0 0.18em #101030, inset 0 0 0 0.12em #101030;
+         padding: 0.5em 0.8em; line-height: 1.45; text-shadow: 0.1em 0.1em 0 #0a0a30; }
+  #msg { position: fixed; font-size: max(var(--u), 13px); display: none; pointer-events: none; z-index: 3; }
+  #msg .name { color: #ffe08a; }
+  #hud { left: 6.2%; top: 1.8%; font-size: max(0.72em, 12px); display: flex; align-items: center; gap: 0.5em;
+         text-shadow: 0.12em 0.12em 0 #000; }
+  #hud .mode { padding: 0.1em 0.5em; border: 0.12em solid #e8e8f8; border-radius: 0.3em;
+               background: rgba(16, 26, 92, 0.75); }
+  #toast { left: 50%; top: 12%; transform: translateX(-50%); font-size: max(0.9em, 12px); display: none; white-space: nowrap; }
+  .bubble { position: absolute; transform: translate(-50%, -100%); font-size: max(0.62em, 12px); white-space: nowrap;
+            background: #f8f4ff; color: #1a1030; padding: 0.15em 0.45em; border-radius: 0.5em;
+            border: 0.12em solid #1a1030; text-shadow: none; }
+  .bubble.her { background: #fff4d8; }
+  .bubble.cry { background: #ffd8dc; color: #6a0010; }
+
+  /* full-screen overlay: title / pause / game over / clear */
+  #center { position: fixed; inset: 0; display: none; flex-direction: column; z-index: 5;
+            align-items: center; justify-content: center; text-align: center;
+            font-size: clamp(12px, 3.2vmin, 26px); padding: env(safe-area-inset-top, 0px) 4vw env(safe-area-inset-bottom, 0px); }
+  #center .portrait { width: 6.5em; height: 6.5em; border-radius: 50%; image-rendering: pixelated; margin-bottom: 0.6em;
+                      border: 0.15em solid #e8d8a8; box-shadow: 0 0 1.2em rgba(255, 210, 120, 0.45); }
+  @media (max-height: 420px) { #center .portrait { width: 4.2em; height: 4.2em; margin-bottom: 0.3em; } }
+  #center h1 { font-size: 2.6em; margin: 0; letter-spacing: 0.1em; color: #ffe9a8;
+               text-shadow: 0.08em 0.08em 0 #6a3a10, 0 0 0.4em rgba(255, 220, 140, 0.5); font-weight: normal; }
+  #center h2 { font-size: 1em; margin: 0.4em 0 1.2em; color: #b8c4ff; font-weight: normal; }
+  #center .blink { animation: blink 1.1s steps(2) infinite; font-size: 1em; }
+  #center .keys { margin-top: 1.4em; font-size: 0.7em; line-height: 1.7; color: #d8d8ee; text-align: left; }
+  #center .keys b { color: #ffe08a; font-weight: normal; display: inline-block; min-width: 8em; }
+  #center .menu { display: flex; gap: 0.8em; flex-wrap: wrap; justify-content: center; margin-top: 1.2em; }
+  #center button { font: inherit; font-size: 0.85em; color: #f4f0ff; background: linear-gradient(#2b3c9c, #101a5c);
+                   border: 0.18em solid #e8e8f8; border-radius: 0.4em; padding: 0.5em 1em; cursor: pointer; }
+  #center.dark { background: rgba(0, 0, 0, 0.62); }
+  #center.light { color: #3a2a14; }
+  #center.light h1 { color: #b07a20; text-shadow: 0.06em 0.06em 0 #fff4d0, 0 0 0.3em rgba(255, 200, 90, 0.6); }
+  #center.light h2 { color: #6a5434; }
+  #center.light .keys { color: #3a2a14; }
+  #center.light .keys b { color: #9a5a10; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* touch controls */
+  #touch { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 4; }
+  body.touch #touch { display: block; }
+  #pad { position: absolute; left: calc(env(safe-area-inset-left, 0px) + 3vmin);
+         bottom: calc(env(safe-area-inset-bottom, 0px) + 4vmin);
+         width: min(38vmin, 190px); height: min(38vmin, 190px); border-radius: 50%; pointer-events: auto; touch-action: none;
+         background: radial-gradient(circle, rgba(255,255,255,0.05) 0 44%, rgba(255,255,255,0.1) 45% 82%, rgba(255,230,160,0.14) 83%);
+         border: 2px solid rgba(255, 255, 255, 0.28); }
+  #pad .ar { position: absolute; color: rgba(255, 255, 255, 0.45); font-size: min(4vmin, 20px); line-height: 1;
+             transform: translate(-50%, -50%); }
+  #knob { position: absolute; width: 38%; height: 38%; left: 31%; top: 31%; border-radius: 50%;
+          background: rgba(255, 255, 255, 0.32); border: 2px solid rgba(255, 255, 255, 0.5); }
+  #pad.dash #knob { background: rgba(255, 220, 140, 0.55); }
+  .tb { position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%;
+        width: min(17vmin, 84px); height: min(17vmin, 84px); display: flex; align-items: center; justify-content: center;
+        font-family: inherit; font-size: min(3.3vmin, 16px); color: #fff; text-shadow: 0 1px 0 #000;
+        background: rgba(30, 40, 110, 0.55); border: 2px solid rgba(255, 255, 255, 0.45); }
+  .tb.on { background: rgba(255, 220, 140, 0.55); }
+  #bJump { right: calc(env(safe-area-inset-right, 0px) + 3vmin); bottom: calc(env(safe-area-inset-bottom, 0px) + 5vmin);
+           width: min(21vmin, 104px); height: min(21vmin, 104px); font-size: min(3.8vmin, 18px); }
+  #bAtk  { right: calc(env(safe-area-inset-right, 0px) + min(26vmin, 128px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 3vmin); }
+  #bCall { right: calc(env(safe-area-inset-right, 0px) + min(17vmin, 84px)); bottom: calc(env(safe-area-inset-bottom, 0px) + min(28vmin, 138px)); }
+  .sys { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 2vmin); pointer-events: auto; touch-action: none;
+         width: min(10vmin, 48px); height: min(10vmin, 48px); border-radius: 0.4em; font-family: inherit;
+         font-size: min(3.4vmin, 17px); color: #fff; background: rgba(16, 26, 92, 0.6); border: 2px solid rgba(255, 255, 255, 0.45); }
+  #bPause { right: calc(env(safe-area-inset-right, 0px) + 2vmin); }
+  #bFull { right: calc(env(safe-area-inset-right, 0px) + 2vmin + min(12vmin, 58px)); }
+  body.portrait #bPause, body.portrait #bFull { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 47vmin); }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="screen" width="384" height="216"></canvas>
+  <div id="ui">
+    <div id="hud" class="px" style="display:none"><span class="mode" id="mode">ついてくる</span></div>
+    <div id="toast" class="px win"></div>
+    <div id="bubbles"></div>
+  </div>
+</div>
+<div id="msg" class="win"></div>
+<div id="center"></div>
+<div id="touch">
+  <div id="pad"><span class="ar" style="left:50%;top:12%">▲</span><span class="ar" style="left:50%;top:88%">▼</span>
+    <span class="ar" style="left:12%;top:50%">◀</span><span class="ar" style="left:88%;top:50%">▶</span><div id="knob"></div></div>
+  <button class="tb" id="bJump" data-a="jump">ジャンプ</button>
+  <button class="tb" id="bAtk" data-a="attack">杖</button>
+  <button class="tb" id="bCall" data-a="call">呼ぶ</button>
+  <button class="sys" id="bPause" aria-label="ポーズ">❚❚</button>
+  <button class="sys" id="bFull" aria-label="全画面">⛶</button>
+</div>
+
+<script src="src/assets_gen.js"></script>
+<script src="src/core.js"></script>
+<script src="src/stage1.js"></script>
+<script src="src/world.js"></script>
+<script src="src/actors.js"></script>
+<script src="src/props.js"></script>
+<script src="src/touch.js"></script>
+<script src="src/game.js"></script>
+</body>
+</html>
