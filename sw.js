@@ -1,11 +1,11 @@
 // Service worker: offline play. Bump VERSION whenever you publish an update.
-const VERSION = 'lumina-v2';
+const VERSION = 'lumina-v3';
 const APP = [
   './', 'index.html', 'manifest.webmanifest',
   'src/assets_gen.js', 'src/core.js', 'src/stage1.js', 'src/world.js',
   'src/actors.js', 'src/props.js', 'src/touch.js', 'src/cutscene.js', 'src/game.js',
   'icons/icon-32.png', 'icons/icon-192.png', 'icons/icon-512.png',
-  'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
+  'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png', 'assets/story/title.webp',
 ];
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 const FONT_CACHE = 'lumina-fonts';

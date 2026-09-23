@@ -61,6 +61,11 @@ class Hero extends Body {
       }
       case 'attack':
         if (this.onGround) this.vx = approach(this.vx, 0, 0.12);
+        if (this.t >= 4 && this.t <= 12 && this.t % 2 === 0) {
+          const tip = this.caneTip();
+          game.particles.add({ x: tip.x, y: tip.y - 2, vx: rand(-0.6, 0.6), vy: rand(-1.4, -0.4), life: rand(12, 22),
+            col: Math.random() < 0.5 ? '#ffb040' : '#fff2b0' });
+        }
         if (this.t >= 4 && this.t <= 10) game.attackHit(this, this.attackBox());
         if (this.t >= 18) { this.state = 'normal'; this.attackCd = 4; }
         break;
@@ -157,30 +162,45 @@ class Hero extends Body {
     if (this.state === 'attack') this.drawCane(ctx, x, y);
   }
 
+  // the lamplighter's pole (灯竿): raised behind, then swung forward
+  caneAngle() { return this.t < 3 ? -2.5 : lerp(-2.5, 0.75, clamp((this.t - 3) / 6, 0, 1)); }
+  caneTip() {
+    const f = this.facing, a = this.caneAngle();
+    return { x: this.x + f * 7 + Math.cos(a) * 17 * f, y: this.y - 25 + Math.sin(a) * 17 };
+  }
+  // how strongly the old ember at its tip burns (0..1); it flares during the swing
+  caneFlare() {
+    if (this.state !== 'attack') return 0;
+    const t = this.t;
+    return t < 3 ? 0.35 : t <= 10 ? 1 : Math.max(0.25, 1 - (t - 10) / 8);
+  }
+
   drawCane(ctx, x, y) {
     const t = this.t, f = this.facing;
     const hx = x + f * 7, hy = y - 25;
-    const angAt = (k) => lerp(-2.5, 0.75, clamp(k, 0, 1));
-    const k = (t - 3) / 6;
-    const a = t < 3 ? -2.5 : angAt(k);
-    // swoosh trail
+    const a = this.caneAngle();
+    // trail of fire
     if (t >= 4 && t <= 12) {
       for (let j = 1; j <= 5; j++) {
         const aa = a - j * 0.28;
         if (aa < -2.5) break;
-        for (let r = 11; r <= 18; r += 1) {
-          ctx.fillStyle = j < 3 ? '#fff6c8' : '#c8b8ff';
-          ctx.globalAlpha = 1 - j / 6;
-          ctx.fillRect(Math.round(hx + Math.cos(aa) * r * f), Math.round(hy + Math.sin(aa) * r), 1, 1);
-        }
+        ctx.fillStyle = j < 2 ? '#fff2b0' : j < 4 ? '#ffb040' : '#e0602a';
+        ctx.globalAlpha = 1 - j / 6;
+        for (let r = 14; r <= 19; r += 1) ctx.fillRect(Math.round(hx + Math.cos(aa) * r * f), Math.round(hy + Math.sin(aa) * r), 1, 1);
       }
       ctx.globalAlpha = 1;
     }
     const ex = hx + Math.cos(a) * 17 * f, ey = hy + Math.sin(a) * 17;
     pxLine(ctx, hx, hy, ex, ey, '#5a3a22');
     pxLine(ctx, hx, hy + 1, ex, ey + 1, '#2a180e');
-    ctx.fillStyle = '#f2cc62'; ctx.fillRect(Math.round(ex) - 1, Math.round(ey) - 1, 2, 2);
     ctx.fillStyle = '#c8d0e0'; ctx.fillRect(Math.round(hx) - 1, Math.round(hy) - 1, 2, 2);
+    // brass cap and its flame (flames always rise, whatever the pole's angle)
+    const px = Math.round(ex), py = Math.round(ey), fl = this.caneFlare(), w = t % 6 < 3 ? 0 : 1;
+    ctx.fillStyle = '#b8862c'; ctx.fillRect(px - 1, py - 1, 3, 2);
+    const h = fl > 0.6 ? 5 : 3;
+    ctx.fillStyle = '#e0602a'; ctx.fillRect(px - 1, py - h + 1, 3, h - 1);
+    ctx.fillStyle = '#ffb040'; ctx.fillRect(px - 1 + w, py - h, 2, h - 1);
+    ctx.fillStyle = '#fff4c0'; ctx.fillRect(px, py - h + 2, 1, Math.max(1, h - 3));
   }
 }
 

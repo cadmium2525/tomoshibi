@@ -17,7 +17,7 @@ class Game {
       wrap: document.getElementById('wrap'), msg: document.getElementById('msg'), toast: document.getElementById('toast'),
       center: document.getElementById('center'), hud: document.getElementById('hud'), mode: document.getElementById('mode'),
       bubbles: document.getElementById('bubbles'), chapter: document.getElementById('chapter'),
-      skip: document.getElementById('skip'),
+      skip: document.getElementById('skip'), titlebg: document.getElementById('titlebg'),
     };
     this.bubbleEls = new Map();
     this.stats = { time: 0, grabs: 0, kills: 0, retries: 0 };
@@ -712,16 +712,19 @@ class Game {
       <b>Enter</b>ポーズ　<b style="min-width:0">M</b> 音 ON/OFF</div>`;
   }
   showTitle() {
-    this.showCenter(`<img class="portrait" src="icons/icon-512.png" alt=""><h1>灯のルミナ</h1><h2>第1章 ─ 忘れられた地下聖堂</h2>
-      <div class="blink">${Touch.enabled ? 'タップでスタート' : 'PRESS Z / ENTER'}</div>${this.keysHtml()}
-      ${document.body.classList.contains('portrait') ? '<div style="margin-top:1.2em;font-size:0.75em;color:#ffe08a">📱 横向きにすると 画面が大きくなります</div>' : ''}`, true);
+    this.showCenter(`<h1>灯のルミナ</h1><h2>第1章 ─ 忘れられた地下聖堂</h2>
+      <div class="press"><div class="blink">${Touch.enabled ? 'タップでスタート' : 'PRESS Z / ENTER'}</div>
+      ${document.body.classList.contains('portrait') ? '<div class="note">📱 横向きにすると 画面が大きくなります</div>' : ''}</div>`,
+      false, false, 'title');
+    this.ui.titlebg.style.display = 'block';
   }
-  showCenter(html, dark = false, light = false) {
+  showCenter(html, dark = false, light = false, cls = '') {
+    this.ui.titlebg.style.display = 'none';
     const c = this.ui.center;
     c.innerHTML = html; c.style.display = 'flex';
-    c.className = 'px' + (dark ? ' dark' : '') + (light ? ' light' : '');
+    c.className = 'px' + (dark ? ' dark' : '') + (light ? ' light' : '') + (cls ? ' ' + cls : '');
   }
-  hideCenter() { this.ui.center.style.display = 'none'; }
+  hideCenter() { this.ui.center.style.display = 'none'; this.ui.titlebg.style.display = 'none'; }
 
   // ---- render --------------------------------------------------------------------
   render() {
@@ -808,6 +811,8 @@ class Game {
     }
     const h = this.heroine, hero = this.hero;
     L.push({ x: hero.x, y: hero.y - 20, r: 58, a: 0.55 });
+    const fl = hero.caneFlare();
+    if (fl > 0) { const tip = hero.caneTip(); L.push({ x: tip.x, y: tip.y - 2, r: 24 + 34 * fl, a: 0.85, col: `rgba(255,150,60,${0.22 * fl})` }); }
     L.push({ x: h.x, y: h.y - 16, r: 50, a: 0.8, col: 'rgba(200,220,255,0.10)' });
     for (const p of this.plates) { const l = p.light(); if (l) L.push(l); }
     for (const s of this.shrines) { const l = s.light(); if (l) L.push(l); }
