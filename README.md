@@ -42,7 +42,7 @@
 
 ## GitHub Pages で公開する
 
-ビルド不要なので、リポジトリのルートをそのまま公開できます。
+公開中： https://cadmium2525.github.io/tomoshibi/ （ビルド不要。リポジトリのルートをそのまま公開）
 
 1. このフォルダを GitHub リポジトリに push
 2. リポジトリの Settings → Pages → Build and deployment を「Deploy from a branch」、ブランチ `main` / フォルダ `/ (root)` に設定
@@ -108,7 +108,6 @@ cd tools && python build_assets.py
 
 - 第 2 章「薄明の森」の設計（`docs/STORY.md` の章構成を参照）
 - 女王・マルタの寸劇用ドット絵（立ち絵は `assets/chars/queen/`・`assets/chars/marta/` にある）
-- GitHub Pages の有効化（Settings → Pages → `main` / `/ (root)`）
 
 ## テスト用
 
