@@ -107,6 +107,7 @@ cd tools && python build_assets.py
 ## 次にやること
 
 - 第 2 章「薄明の森」の設計（`docs/STORY.md` の章構成を参照）
+- グレイの攻撃モーション（`assets/chars/oldman/attack_sheet.webp`、51コマ）を組み込む：白背景と足元の影を透過、炎は控えめに減色・縮小して灯竿の火種に合わせる
 - 女王・マルタの寸劇用ドット絵（立ち絵は `assets/chars/queen/`・`assets/chars/marta/` にある）
 
 ## テスト用
