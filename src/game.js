@@ -58,7 +58,7 @@ class Game {
     this.flags = {}; this.msgT = 0; this.msgHtml = ''; this.toastT = 0; this.fade = 0;
     this.particles = new Particles();
     this.gates = []; this.plates = []; this.levers = []; this.blocks = []; this.shrines = [];
-    this.signs = []; this.ambushes = []; this.door = null; this.shadows = []; this.portals = [];
+    this.signs = []; this.ambushes = []; this.door = null; this.shadows = []; this.portals = []; this.npcs = [];
     for (const e of stage.ents) {
       switch (e.type) {
         case 'hero': this.hero = new Hero(e.x, e.y); break;
@@ -307,7 +307,30 @@ class Game {
     if (this.fade > 0) this.fade = Math.max(0, this.fade - 0.025);     // flash
     this.particles.update();
     for (const g of this.gates) g.update(this);
+    for (const n of this.npcs) n.update();
     if (this.shake > 0) this.shake -= 0.25;
+  }
+
+  // put a cutscene character on stage (g[key] refers to it while it stays)
+  addNpc(key, name, x, y, opt) {
+    this.removeNpc(key);
+    const n = new Npc(name, x, y, opt);
+    n.key = key; this[key] = n; this.npcs.push(n);
+    return n;
+  }
+  removeNpc(key) {
+    this.npcs = this.npcs.filter((n) => n.key !== key);
+    delete this[key];
+  }
+  // a sprite drawn big into a <canvas class="portrait"> inside the centre overlay
+  paintPortrait(sheet, frame) {
+    const c = this.ui.center.querySelector('canvas.portrait');
+    const r = c && Sheets[sheet].f[frame];
+    if (!r) return;
+    c.width = r[2]; c.height = r[3];
+    const x = c.getContext('2d');
+    x.imageSmoothingEnabled = false;
+    x.drawImage(Sheets[sheet].img, r[0], r[1], r[2], r[3], 0, 0, r[2], r[3]);
   }
 
   // walk an actor to x; true when arrived
@@ -750,6 +773,7 @@ class Game {
 
     const h = this.heroine;
     if (this.wallShadow) this.drawWallShadow(ctx, cx, cy);
+    for (const n of this.npcs) n.draw(ctx, cx, cy);
     if (h.state !== 'carried') h.draw(ctx, cx, cy);
     for (const s of this.shadows) {
       s.draw(ctx, cx, cy);
@@ -817,6 +841,7 @@ class Game {
     for (const p of this.plates) { const l = p.light(); if (l) L.push(l); }
     for (const s of this.shrines) { const l = s.light(); if (l) L.push(l); }
     if (this.door) L.push(this.door.light());
+    for (const n of this.npcs) { const l = n.light(); if (l) L.push(l); }
     return L;
   }
 

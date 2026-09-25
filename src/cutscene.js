@@ -24,11 +24,17 @@ const Cut = {
     start: (g, s) => { s.from = g.black; },
     update: (g, s, t) => { g.black = lerp(s.from, to, Math.min(1, t / n)); return t >= n; },
   }),
-  letter: (html) => ({
-    start: (g) => g.showCenter(`<div class="letter">${html}<div class="more">▼</div></div>`, true),
+  letter: (html, from) => ({
+    start: (g) => {
+      g.showCenter(`<div class="letter">${from ? '<canvas class="portrait"></canvas>' : ''}${html}<div class="more">▼</div></div>`, true);
+      if (from) g.paintPortrait('npc', from + '0');
+    },
     update: (g, s, t) => t > 30 && (advance() || Input.pressed('start')),
     end: (g) => g.hideCenter(),
   }),
+  // cutscene characters: npc('marta', 'marta', 12, 16, {lit: true}) / npcOff('marta')
+  npc: (key, name, tx, ty, opt) => ({ start: (g) => g.addNpc(key, name, tx * TILE + 8, ty * TILE, opt) }),
+  npcOff: (key) => ({ start: (g) => g.removeNpc(key) }),
   chapter: (num, title) => ({
     start: (g) => g.showChapter(num, title),
     update: (g, s, t) => t >= 170,
@@ -73,7 +79,7 @@ const MARTA_LETTER = `
 function prologueScript() {
   return [
     Cut.run((g) => g.setupPrologue()),
-    Cut.letter(MARTA_LETTER),
+    Cut.letter(MARTA_LETTER, 'marta'),
     Cut.fade(0, 70),
     Cut.wait(40),
     Cut.say('heroine', 'きょうも ふたりきり だね。', 'her', 120),

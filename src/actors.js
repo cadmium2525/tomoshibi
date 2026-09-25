@@ -203,6 +203,39 @@ class Hero extends Body {
 }
 
 // ---------------------------------------------------------------------------
+// Cutscene characters (queen Noctia, sister Marta): front-facing, they only
+// breathe; `lit` makes the lantern they carry glow.
+class Npc {
+  constructor(name, x, y, opt = {}) {
+    this.name = name; this.x = x; this.y = y; this.t = 0;
+    this.lit = opt.lit !== undefined ? opt.lit : name === 'marta';
+    this.alpha = opt.alpha !== undefined ? opt.alpha : 1;
+  }
+  update() { this.t++; }
+  lampPos() {
+    const o = Sheets.npc.lamp[this.name] || [0, -20];
+    return { x: this.x + o[0], y: this.y + o[1] };
+  }
+  light() {
+    if (!this.lit) return null;
+    const p = this.lampPos();
+    return { x: p.x, y: p.y, r: 40 + Math.sin(this.t * 0.3) * 1.5, a: 0.85 * this.alpha, col: 'rgba(255,170,80,0.14)' };
+  }
+  draw(ctx, cx, cy) {
+    if (this.alpha <= 0) return;
+    const x = this.x - cx, y = this.y - cy;
+    drawSprite(ctx, 'npc', this.name + (Math.floor(this.t / 45) % 2), x, y, false, this.alpha < 1 ? { alpha: this.alpha } : null);
+    if (this.lit) {
+      const p = this.lampPos(), f = Math.floor(this.t / 7) % 3;
+      ctx.globalAlpha = this.alpha;
+      ctx.fillStyle = '#ffb040'; ctx.fillRect(Math.round(p.x - cx), Math.round(p.y - cy) - (f === 1 ? 1 : 0), 2, 2);
+      ctx.fillStyle = '#fff4c0'; ctx.fillRect(Math.round(p.x - cx) + (f === 2 ? 1 : 0), Math.round(p.y - cy), 1, 1);
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 class Heroine extends Body {
   constructor(x, y) {
     super(x, y, 5, 30);

@@ -1,5 +1,5 @@
 // Service worker: offline play. Bump VERSION whenever you publish an update.
-const VERSION = 'lumina-v4';
+const VERSION = 'lumina-v5';
 const APP = [
   './', 'index.html', 'manifest.webmanifest',
   'src/assets_gen.js', 'src/core.js', 'src/stage1.js', 'src/world.js',

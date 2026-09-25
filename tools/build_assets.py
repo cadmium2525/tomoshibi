@@ -6,7 +6,7 @@ import json, os
 import numpy as np
 from PIL import Image
 from pixlib import Atlas, to_data_uri
-import build_sprites, heroine, shadow, tiles
+import build_sprites, heroine, shadow, tiles, npc
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "src", "assets_gen.js")
@@ -64,6 +64,10 @@ def main():
     im3, rects = pack(items, 256)
     data["shadow"] = {"src": to_data_uri(im3), "f": rects,
                       "carry": {k: [v[0] - shadow.AX, v[1] - shadow.AY] for k, v in carry.items()}}
+    # cutscene characters --------------------------------------------------
+    N, lamps = npc.items()
+    im5, rects = pack(N, 256)
+    data["npc"] = {"src": to_data_uri(im5), "f": rects, "lamp": lamps}
     # tiles / props ----------------------------------------------------------
     T = tiles.all_items()
     at = Atlas(256)

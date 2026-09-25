@@ -107,7 +107,6 @@ cd tools && python build_assets.py
 ## 次にやること
 
 - 第 2 章「薄明の森」の設計（`docs/STORY.md` の章構成を参照）
-- 女王・マルタの寸劇用ドット絵（立ち絵は `assets/chars/queen/`・`assets/chars/marta/` にある）
 
 ## テスト用
 
