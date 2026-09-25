@@ -200,3 +200,137 @@ class Ambush {
     game.heroine.emote('!', 50);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Old plank: gives way a moment after Grey stands on it (Lumina is too light
+// to break it), and is back a few seconds later.
+class Crumble {
+  constructor(e) { this.x = e.x - 8; this.y = e.y; this.state = 'ok'; this.t = 0; this.drop = 0; }
+  solidBox() { return this.state === 'gone' || this.state === 'fall' ? null : { x0: this.x, x1: this.x + 16, y0: this.y, y1: this.y + 6 }; }
+  update(game) {
+    this.t++;
+    const hero = game.hero;
+    const on = hero.onGround && Math.abs(hero.y - this.y) < 1 && hero.x + hero.hw > this.x && hero.x - hero.hw < this.x + 16;
+    if (this.state === 'ok' && on) {
+      this.state = 'shake'; this.t = 0; Sfx.play('push');
+      if (!game.flags.bridgeMsg) { game.flags.bridgeMsg = true; game.notify('bridge_crumble', 160); }
+    } else if (this.state === 'shake' && this.t >= 10) {
+      this.state = 'fall'; this.t = 0; this.drop = 0; Sfx.play('block');
+      for (let i = 0; i < 5; i++) game.particles.add({ x: this.x + rand(0, 16), y: this.y + 3, vx: rand(-0.4, 0.4), vy: rand(0, 1), g: 0.15, life: 30, col: '#6a4a30', size: 2 });
+    } else if (this.state === 'fall') {
+      this.drop += 0.3 + this.t * 0.25;
+      if (this.t > 40) { this.state = 'gone'; this.t = 0; }
+    } else if (this.state === 'gone' && this.t > 200) {
+      const b = { x0: this.x, x1: this.x + 16, y0: this.y - 30, y1: this.y + 6 };
+      if (![hero, game.heroine].some((a) => overlap(b, a.box()))) { this.state = 'ok'; this.t = 0; }
+    }
+  }
+  draw(ctx, cx, cy) {
+    if (this.state === 'gone') return;
+    const sx = this.state === 'shake' ? (this.t % 4 < 2 ? -1 : 1) : 0;
+    const x = Math.round(this.x - cx + sx), y = Math.round(this.y - cy + (this.state === 'fall' ? this.drop : 0));
+    if (this.state === 'fall') ctx.globalAlpha = Math.max(0, 1 - this.t / 40);
+    ctx.fillStyle = '#2a1a10'; ctx.fillRect(x, y, 16, 6);
+    ctx.fillStyle = '#7a5434'; ctx.fillRect(x + 1, y, 14, 4);
+    ctx.fillStyle = '#9a7048'; ctx.fillRect(x + 1, y, 14, 1);
+    ctx.fillStyle = '#4a3020'; ctx.fillRect(x + 7, y + 1, 1, 3); ctx.fillRect(x + 3, y + 2, 2, 1);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// Bridge of light: solid while any of its plates is pressed.
+class LightBridge {
+  constructor(e) { this.id = e.id; this.x = e.x - 8; this.y = e.y; this.w = e.w * TILE; this.plates = []; this.k = 0; this.on = false; }
+  solidBox() { return this.k > 0.6 ? { x0: this.x, x1: this.x + this.w, y0: this.y, y1: this.y + 6 } : null; }
+  update(game) {
+    const want = this.plates.some((p) => p.pressed);
+    if (want !== this.on) { this.on = want; Sfx.play(want ? 'save' : 'plateoff'); }
+    this.k = want ? Math.min(1, this.k + 0.06) : Math.max(0, this.k - 0.08);
+  }
+  draw(ctx, cx, cy, t) {
+    const x = Math.round(this.x - cx), y = Math.round(this.y - cy);
+    // faint dotted outline where the bridge will appear
+    ctx.fillStyle = 'rgba(120,230,255,0.25)';
+    for (let i = 0; i < this.w; i += 4) ctx.fillRect(x + i, y + 2, 2, 1);
+    if (this.k <= 0) return;
+    const n = Math.floor(this.w / 16);
+    for (let i = 0; i < n; i++) {
+      // planks light up one after another from both ends
+      const d = Math.min(i, n - 1 - i) / (n / 2);
+      const a = clamp(this.k * 1.6 - d * 0.6, 0, 1);
+      if (a <= 0) continue;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#5ad0f0'; ctx.fillRect(x + i * 16 + 1, y, 14, 5);
+      ctx.fillStyle = '#c8f6ff'; ctx.fillRect(x + i * 16 + 1, y, 14, 1);
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(x + i * 16 + 3 + ((t >> 3) + i * 5) % 10, y + 1, 2, 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+  light() { return this.k > 0 ? { x: this.x + this.w / 2, y: this.y, r: 30 + this.w * 0.45 * this.k, a: 0.7 * this.k, col: `rgba(90,220,240,${0.12 * this.k})` } : null; }
+}
+
+// Rock that drops from the ceiling during the escape and then lies in the way.
+class Rock {
+  constructor(e) { this.x = e.x; this.floor = e.y; this.y = e.y; this.state = 'wait'; this.t = 0; this.top = 0; }
+  solidBox() { return this.state === 'down' ? { x0: this.x - 8, x1: this.x + 8, y0: this.y - 16, y1: this.y } : null; }
+  update(game) {
+    this.t++;
+    const hero = game.hero;
+    if (this.state === 'wait') {
+      if (game.escape && hero.x > this.x - 120) {
+        this.state = 'warn'; this.t = 0;
+        let k = 1; while (k < 12 && !game.world.pointSolid(this.x, this.floor - 16 * k - 1)) k++;
+        this.top = this.floor - 16 * k;
+      }
+    } else if (this.state === 'warn') {
+      if (this.t % 3 === 0) game.particles.add({ x: this.x + rand(-7, 7), y: this.top + 1, vy: rand(0.5, 1.5), g: 0.1, life: 30, col: '#8a8070' });
+      if (this.t >= 40) { this.state = 'fall'; this.t = 0; this.y = this.top + 16; this.vy = 0; }
+    } else if (this.state === 'fall') {
+      this.vy = Math.min(7, this.vy + 0.4); this.y += this.vy;
+      const b = { x0: this.x - 7, x1: this.x + 7, y0: this.y - 15, y1: this.y };
+      if (overlap(b, hero.box())) hero.knock(hero.x < this.x ? -1 : 1);
+      if (this.y >= this.floor) {
+        this.y = this.floor; this.state = 'down'; game.shake = 4; Sfx.play('block');
+        game.particles.burst(this.x, this.y - 4, 10, { col: '#8a8070', life: 24, max: 1.4 });
+        // never bury anyone inside it
+        for (const a of [hero, game.heroine]) if (overlap(this.solidBox(), a.box())) a.x = a.x < this.x ? this.x - 8 - a.hw - 0.1 : this.x + 8 + a.hw + 0.1;
+      }
+    }
+  }
+  draw(ctx, cx, cy) {
+    if (this.state === 'fall' || this.state === 'down') drawTile(ctx, 'block', this.x - 8 - cx, this.y - 16 - cy);
+  }
+}
+
+// The cave-in chasing them: a wall of falling rubble that moves right.
+class Collapse {
+  constructor(x, floorY) { this.x = x; this.y = floorY; this.t = 0; this.speed = 0; }
+  update(game) {
+    this.t++;
+    const hero = game.hero;
+    // eases in, then keeps a steady pace a little slower than a dash
+    this.speed = Math.min(1.95, this.speed + 0.02);
+    const gap = hero.x - this.x;
+    this.x += this.speed + (gap > 230 ? 1.2 : 0);           // never falls hopelessly behind
+    if (this.t % 12 === 0) game.shake = Math.max(game.shake, 2);
+    if (this.t % 30 === 0) Sfx.play('block');
+    if (this.t % 2 === 0) {
+      game.particles.add({ x: this.x + rand(-30, 4), y: game.cam.y - 4, vx: rand(-0.3, 0.3), vy: rand(1, 3), g: 0.25, life: 70, col: Math.random() < 0.5 ? '#6a6270' : '#4a4450', size: 2 + (Math.random() < 0.3 ? 1 : 0) });
+    }
+  }
+  caught(a) { return a.x - a.hw < this.x - 2; }
+  draw(ctx, cx, cy) {
+    const x = Math.round(this.x - cx);
+    if (x < -40) return;
+    const g = ctx.createLinearGradient(x - 60, 0, x + 6, 0);
+    g.addColorStop(0, 'rgba(6,4,12,1)'); g.addColorStop(0.8, 'rgba(20,16,26,0.95)'); g.addColorStop(1, 'rgba(40,34,48,0)');
+    ctx.fillStyle = g; ctx.fillRect(Math.min(0, x - 60), 0, Math.max(0, x + 6 - Math.min(0, x - 60)), VH);
+    // tumbling boulders along the front
+    for (let i = 0; i < 7; i++) {
+      const bx = x - 10 + Math.sin(this.t * 0.07 + i * 1.7) * 6;
+      const by = ((this.t * (3 + i % 3) + i * 37) % (VH + 40)) - 20;
+      ctx.fillStyle = i % 2 ? '#3a3440' : '#57505e';
+      ctx.fillRect(Math.round(bx), Math.round(by), 6 + (i % 3) * 2, 5 + (i % 2) * 2);
+    }
+  }
+}

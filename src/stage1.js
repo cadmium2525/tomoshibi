@@ -5,7 +5,7 @@
 // first solid tile under a floor (feet y = surface * 16).
 // ---------------------------------------------------------------------------
 function buildStage1() {
-  const W = 182, H = 48;
+  const W = 332, H = 48;
   const solid = new Uint8Array(W * H).fill(1);
   const noBg = new Uint8Array(W * H);          // 1 = no back wall (parallax shows)
   const ents = [];
@@ -113,18 +113,71 @@ function buildStage1() {
   dec('torch', 146, 17); dec('torch', 157, 17);
   dec('banner', 153, 14);
 
-  // ===== Zone 6: great hall & exit door =====================================
-  carve(161, 4, 180, 21);
-  sky(161, 4, 180, 15);
-  ent('ambush', 166, 21, {
-    id: 'a2', x0: 167, x1: 170,
-    waves: [[{ tx: 163, ty: 21 }, { tx: 173, ty: 21 }], [{ tx: 166, ty: 21 }, { tx: 176, ty: 21 }]],
+  // ===== Zone 6: the fragile bridge ===========================================
+  // Old planks give way under Grey's weight but hold the light girl: she walks
+  // the bridge while he hops along the broken beams above her.
+  carve(161, 8, 197, 21);              // surface 22
+  fill(161, 21, 163, 21);              // a step up to the beams (surface 21)
+  carve(167, 22, 186, H - 1); sky(167, 22, 186, H - 1);
+  for (let x = 167; x <= 186; x++) ent('crumble', x, 21);
+  fill(165, 19, 166, 19);              // beams (their undersides clear her head)
+  fill(169, 18, 171, 18);
+  fill(174, 17, 176, 17);
+  fill(179, 18, 181, 18);
+  fill(184, 19, 185, 19);
+  ent('shrine', 161, 20, { id: 's4' });
+  ent('sign', 163, 20, { text: 'sign_bridge' });
+  dec('torch', 162, 16); dec('torch', 177, 12); dec('torch', 190, 17);
+  dec('chain', 172, 8, { len: 4 }); dec('chain', 182, 8, { len: 5 });
+  dec('window', 168, 10); dec('window', 186, 10);
+
+  // ===== Zone 7: the bridge of light ===========================================
+  // While a plate is held, a bridge of light spans the chasm. She holds one plate;
+  // Grey crosses and sets the stone on the other so she can follow.
+  carve(187, 8, 214, 21);              // surface 22
+  carve(197, 22, 203, H - 1); sky(197, 22, 203, H - 1);
+  ent('lightbridge', 197, 21, { id: 'lb1', w: 7 });
+  fill(204, 21, 204, 21);              // curb: stops the stone on the plate
+  ent('shrine', 189, 21, { id: 's5' });
+  ent('sign', 192, 21, { text: 'sign_light' });
+  ent('plate', 195, 21, { id: 'p5', gates: ['lb1'] });
+  ent('plate', 205, 21, { id: 'p6', gates: ['lb1'] });
+  ent('block', 209, 21, { id: 'b2' });
+  dec('torch', 193, 17); dec('torch', 207, 17); dec('torch', 212, 17);
+  dec('banner', 199, 11); dec('pillar', 188, 8, { to: 21 });
+
+  // ===== Zone 8: great hall & the sealed door =================================
+  carve(215, 4, 236, 21);
+  sky(215, 4, 236, 15);
+  ent('ambush', 220, 21, {
+    id: 'a2', x0: 221, x1: 224,
+    waves: [[{ tx: 217, ty: 21 }, { tx: 227, ty: 21 }], [{ tx: 220, ty: 21 }, { tx: 230, ty: 21 }]],
   });
-  ent('door', 177, 21, { dx: 0 });
-  dec('pillar', 162, 4, { to: 21 }); dec('pillar', 171, 4, { to: 21 });
-  dec('window', 165, 6); dec('window', 174, 6);
-  dec('torch', 164, 16); dec('torch', 169, 16); dec('torch', 174, 16); dec('torch', 179, 16);
-  dec('banner', 167, 10); dec('banner', 176, 10);
+  ent('door', 232, 21, { dx: 0 });
+  dec('pillar', 216, 4, { to: 21 }); dec('pillar', 225, 4, { to: 21 });
+  dec('window', 219, 6); dec('window', 228, 6);
+  dec('torch', 218, 16); dec('torch', 223, 16); dec('torch', 228, 16); dec('torch', 235, 16);
+  dec('banner', 221, 10); dec('banner', 230, 10);
+
+  // ===== Zone 9: the collapse (escape) =========================================
+  // Beyond the door a passage climbs to the surface. The cathedral caves in
+  // behind them; Grey runs holding her hand. [x0, x1, surface | null = pit]
+  const run = [
+    [242, 252, 30], [253, 255, null], [256, 262, 30], [263, 266, 29], [267, 270, 28],
+    [271, 274, null], [275, 282, 27], [283, 292, 25], [293, 295, null], [296, 302, 24],
+    [303, 306, 22], [307, 312, 21], [313, 316, 19], [317, 330, 18],
+  ];
+  let prev = 30;
+  for (const [x0, x1, sf] of run) {
+    if (sf === null) { carve(x0, prev - 6, x1, H - 1); sky(x0, prev, x1, H - 1); continue; }
+    carve(x0, sf - 6, x1, sf - 1);
+    prev = sf;
+  }
+  ent('escape', 244, 29, { id: 's6' });
+  ent('rock', 259, 29); ent('rock', 279, 26); ent('rock', 289, 24); ent('rock', 309, 20);
+  ent('exit', 326, 17, { dx: 0 });
+  dec('torch', 247, 25); dec('torch', 260, 25); dec('torch', 278, 22); dec('torch', 299, 19); dec('torch', 314, 14);
+  dec('chain', 268, 22, { len: 3 }); dec('chain', 305, 16, { len: 3 });
 
   return { W, H, solid, noBg, ents, decor, name: '忘れられた地下聖堂' };
 }
@@ -151,5 +204,11 @@ const TEXT = {
   door_open: N('グレイ') + '……この扉は、あの子の光にしか 応えないのか。',
   hint_danger: N('グレイ') + 'しまった、ルミナから離れすぎた…！ 心細さに 彼女の光が揺らいでいる。急いで戻らねば！',
   hint_stuck: N('ヒント') + '行き詰まったら ポーズ（{pause}）から「最後の灯籠から やり直す」を選べる。',
+  sign_bridge: N('石碑') + '「朽ちし橋 重き者を拒み 軽き光を渡す」<br>' + N('ヒント') +
+    '古い橋板は グレイが乗ると 崩れてしまう。ルミナは軽いので 渡れる。グレイは 上の梁を跳んで進もう。',
+  sign_light: N('石碑') + '「巫女の立つ間 光は橋となる」<br>' + N('ヒント') +
+    'ルミナが石板に乗っている間だけ、光の橋が架かる。向こう岸にも 石板があるようだ…。',
+  hint_escape: N('ヒント') + '崩落に 追いつかれる前に 出口へ！ {dash}で走り、{jump}で跳べ。ルミナは 手をつないで ついてくる。',
+  bridge_crumble: N('グレイ') + 'くっ…！ わたしの重さでは 橋板が もたないか。',
   hint_grab: N('グレイ') + 'ルミナ！ 渦に沈められる前に、{attack} で灯竿を振れ！',
 };

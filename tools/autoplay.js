@@ -99,9 +99,45 @@ window.autoplay = function () {
   if (!game.plates[2].pressed) fail('block not on plate');
   walkTo(157); frames(1, [], ['KeyC']);
   waitFor(() => Y().x > 152 * 16 && Y().state === 'normal', 600, 'through gate2');
-  // --- zone 6 hall
-  walkTo(168); fight(); waitFor(() => Y().state === 'normal', 300, 'recover2');
-  walkTo(177.5); waitFor(() => game.state !== 'play', 600, 'door');
+  // --- zone 6 fragile bridge: Grey hops along the beams, she walks the planks
+  function hop(edge) {
+    let i = 0; while (tile(H().x) < edge && i++ < 300) frames(1, ['ArrowRight']);
+    frames(14, ['ArrowRight', 'KeyZ']);
+    let j = 0; while (!H().onGround && j++ < 80) frames(1, ['ArrowRight']);
+    frames(2);
+    if (H().state === 'fallout') fail('fell at ' + edge);
+  }
+  walkTo(162.5); waitFor(() => herNear(48), 400, 'z6'); note('shrine4 ' + game.shrines[3].lit);
+  hop(163.6); frames(30); hop(166.7); frames(30); hop(171.7); frames(30); hop(176.7); frames(30); hop(181.7); frames(30); hop(185.7);
+  walkTo(190); waitFor(() => herNear(48), 600, 'across bridge'); note('bridge crossed');
+  // --- zone 7 bridge of light
+  walkTo(195.6); frames(80); frames(1, [], ['KeyC']);
+  const P = (id) => game.plates.find((p) => p.id === id);
+  waitFor(() => P('p5').pressed && game.bridges[0].k >= 1, 200, 'light bridge');
+  walkTo(203.7); frames(14, ['ArrowRight', 'KeyZ']); walkTo(208); frames(14, ['ArrowRight', 'KeyZ']); walkTo(211);
+  let k = 0; while (!P('p6').pressed && k++ < 600) frames(1, ['ArrowLeft']);
+  if (!P('p6').pressed) fail('stone not on p6');
+  fight();
+  walkTo(212); frames(1, [], ['KeyC']);
+  waitFor(() => Y().x > 206 * 16 && Y().state === 'normal', 600, 'she crossed'); note('light bridge done');
+  // --- zone 8 hall
+  walkTo(222); fight(); waitFor(() => Y().state === 'normal', 300, 'recover2');
+  walkTo(234); waitFor(() => game.state === 'cutscene', 600, 'door');
+  let c = 0; while (game.state === 'cutscene' && c++ < 2000) T.run(1, [], c % 20 === 0 ? ['KeyZ'] : []);
+  if (!game.escape) fail('escape did not start');
+  // --- zone 9 the collapse
+  let hold = 0; c = 0;
+  while (game.state === 'play' && c++ < 2000) {
+    const h = H(), w = game.world, keys = ['ArrowRight', 'ShiftLeft'];
+    if (hold > 0) { keys.push('KeyZ'); hold--; }
+    else if (h.onGround) {
+      const a = h.x + 14;
+      if ((!w.pointSolid(a + 6, h.y + 2) && !w.pointSolid(a + 6, h.y + 18)) || w.pointSolid(a, h.y - 4) || w.pointSolid(a, h.y - 20)) hold = 16;
+    }
+    const r = game.stats.retries;
+    frames(1, keys);
+    if (game.stats.retries > r) fail('caught by the collapse');
+  }
   waitFor(() => game.state === 'clear', 400, 'clear');
   note('CLEAR stats ' + JSON.stringify(game.stats));
   return log.join('\n');

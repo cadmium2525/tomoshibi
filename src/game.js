@@ -76,6 +76,8 @@ class Game {
     this.particles = new Particles();
     this.gates = []; this.plates = []; this.levers = []; this.blocks = []; this.shrines = [];
     this.signs = []; this.ambushes = []; this.door = null; this.shadows = []; this.portals = []; this.npcs = [];
+    this.crumbles = []; this.bridges = []; this.rocks = []; this.exitDoor = null; this.escapeSpot = null;
+    this.escape = false; this.collapse = null; this.pendingFall = false;
     for (const e of stage.ents) {
       switch (e.type) {
         case 'hero': this.hero = new Hero(e.x, e.y); break;
@@ -88,10 +90,16 @@ class Game {
         case 'sign': this.signs.push(new Sign(e)); break;
         case 'ambush': this.ambushes.push(new Ambush(e)); break;
         case 'door': this.door = new Door(e); break;
+        case 'crumble': this.crumbles.push(new Crumble(e)); break;
+        case 'lightbridge': this.bridges.push(new LightBridge(e)); break;
+        case 'rock': this.rocks.push(new Rock(e)); break;
+        case 'escape': this.escapeSpot = { id: e.id, x: e.x, y: e.y, escape: true }; break;
+        case 'exit': this.exitDoor = new Door(e); this.exitDoor.open = 1; this.exitDoor.opening = true; break;
       }
     }
     for (const g of this.gates) g.plates = this.plates.filter((p) => p.gateIds.includes(g.id));
-    this.world.dyn = [...this.gates, ...this.blocks];
+    for (const b of this.bridges) b.plates = this.plates.filter((p) => p.gateIds.includes(b.id));
+    this.world.dyn = [...this.gates, ...this.blocks, ...this.crumbles, ...this.bridges, ...this.rocks];
     if (cp) {
       for (const l of this.levers) if (cp.levers.includes(l.id)) { l.on = true; }
       for (const g of this.gates) if (this.levers.some((l) => l.on && l.gateIds.includes(g.id))) { g.locked = true; g.open = 1; }
@@ -112,11 +120,12 @@ class Game {
     this.updateCamera(true);
     for (const el of this.bubbleEls.values()) el.el.remove();
     this.bubbleEls.clear();
+    if (cp && cp.escape) this.beginEscape(false);
   }
 
   saveCheckpoint(shrine) {
     this.checkpoint = {
-      x: shrine.x, y: shrine.y,
+      x: shrine.x, y: shrine.y, escape: !!shrine.escape,
       levers: this.levers.filter((l) => l.on).map((l) => l.id),
       shrines: this.shrines.filter((s) => s.lit).map((s) => s.id),
       ambush: this.ambushes.filter((a) => a.done).map((a) => a.id),
@@ -130,7 +139,7 @@ class Game {
   progressSnapshot() {
     const cp = this.checkpoint || {};
     return {
-      x: cp.x, y: cp.y,
+      x: cp.x, y: cp.y, escape: cp.escape,
       levers: this.levers.filter((l) => l.on).map((l) => l.id),
       shrines: this.shrines.filter((s) => s.lit).map((s) => s.id),
       ambush: this.ambushes.filter((a) => a.done).map((a) => a.id),
@@ -243,12 +252,15 @@ class Game {
     if (this.black > 0) this.black = Math.max(0, this.black - 0.04);    // fading back in after a fall
     const hero = this.hero, h = this.heroine;
 
-    if (Input.pressed('call') && hero.state !== 'fallout') this.call();
+    if (Input.pressed('call') && hero.state !== 'fallout' && !this.escape) this.call();
     hero.update(this);
     if (this.pendingFall) { this.pendingFall = false; this.fellOut(); return; }
     this.checkReach();
     for (const b of this.blocks) b.update(this);
+    for (const c of this.crumbles) c.update(this);
+    for (const r of this.rocks) r.update(this);
     for (const p of this.plates) p.update(this);
+    for (const b of this.bridges) b.update(this);
     for (const g of this.gates) g.update(this);
     for (const s of this.shrines) s.update(this);
     h.update(this);
@@ -262,6 +274,7 @@ class Game {
     for (const a of this.ambushes) a.update(this);
     this.updateDanger();
     this.updateDoor();
+    if (this.escape && this.updateEscape()) return;
     this.particles.update();
     this.updateCamera(false);
     this.updateMessages();
@@ -293,6 +306,7 @@ class Game {
 
   // ---- prologue / cutscenes -----------------------------------------------------
   startPrologue() {
+    this.cutSkip = null;
     this.state = 'cutscene';
     this.ui.hud.style.display = 'none';
     this.ui.skip.style.display = 'block';
@@ -346,7 +360,7 @@ class Game {
 
   updateCutscene() {
     this.t++;
-    if (Input.pressed('start')) { this.finishPrologue(); return; }
+    if (Input.pressed('start')) { (this.cutSkip || (() => this.finishPrologue()))(); return; }
     this.cut.update();
     if (!this.cut) return;
     for (const a of [this.hero, this.heroine]) {
@@ -547,7 +561,7 @@ class Game {
 
   checkReach() {
     const hero = this.hero, h = this.heroine;
-    if (hero.state !== 'reach') return;
+    if (hero.state !== 'reach' || this.escape) return;
     const plan = this.reachPlan();
     if (!plan) return;
     if (plan.type === 'pull') {
@@ -615,6 +629,7 @@ class Game {
   // leaving her alone summons the shadows
   updateDanger() {
     const hero = this.hero, h = this.heroine;
+    if (this.escape) { this.dangerT = 0; return; }
     const d = Math.hypot(h.x - hero.x, (h.y - hero.y) * 1.2);
     const safe = h.x < 46 * TILE && h.y < 17 * TILE;          // tutorial corridor
     const exposed = ['normal', 'down', 'getup'].includes(h.state);
@@ -673,16 +688,66 @@ class Game {
       } else if (heroNear && sealed && !this.flags.sealMsg) {
         this.flags.sealMsg = true; this.notify('door_sealed', 150);
       }
-    } else if (d.open >= 1 && hNear && heroNear) {
+    } else if (d.open >= 1 && hNear && heroNear && !d.passed) {
+      d.passed = true;
+      this.state = 'cutscene';
+      this.ui.skip.style.display = 'block';
+      this.cutSkip = () => { this.cut = null; this.hideTalk(); this.beginEscape(true); };
+      this.cut = new Cutscene(this, collapseScript(), () => this.beginEscape(true));
+    }
+  }
+
+  // ---- the collapse: run for the exit hand in hand ---------------------------------
+  placeAtEscape() {
+    const e = this.escapeSpot, hero = this.hero, h = this.heroine;
+    hero.x = e.x + 12; hero.y = e.y; hero.facing = 1; hero.vx = hero.vy = 0;
+    h.x = e.x - 4; h.y = e.y; h.facing = 1; h.vx = h.vy = 0;
+    this.shadows = []; this.portals = [];
+    this.updateCamera(true);
+  }
+
+  beginEscape(first) {
+    const e = this.escapeSpot, hero = this.hero, h = this.heroine;
+    if (Math.abs(hero.x - e.x) > 40 || Math.abs(hero.y - e.y) > 20) this.placeAtEscape();
+    hero.setState('normal'); hero.pose = null; hero.kinematic = false; hero.front = false;
+    h.setState('hand'); h.pose = null; h.mode = 'follow';
+    hero.trail = [];
+    for (let i = 0; i < 20; i++) hero.trail.push({ x: h.x + (hero.x - h.x) * i / 19, y: hero.y });
+    hero.lastSafe = { x: hero.x, y: hero.y };
+    this.escape = true;
+    this.collapse = new Collapse(e.x - 110, e.y);
+    this.state = 'play';
+    this.ui.skip.style.display = 'none'; this.ui.hud.style.display = 'flex';
+    if (first) {
+      this.black = 0;
+      this.saveCheckpoint(e);
+      this.notify('hint_escape', 240);
+    }
+  }
+
+  // true when this frame ended the play step (caught / reached the exit)
+  updateEscape() {
+    const hero = this.hero, h = this.heroine, c = this.collapse;
+    c.update(this);
+    if (hero.state !== 'fallout' && (c.caught(hero) || c.caught(h))) {
+      this.fellOut();
+      this.say(this.heroine, 'きゃあっ…！', 'cry', 50);
+      return true;
+    }
+    const d = this.exitDoor;
+    if (hero.onGround && hero.x > d.x - 14 && Math.abs(hero.y - d.y) < 8) {
+      this.escape = false;
       this.state = 'ending'; this.et = 0;
       hero.setState('scripted'); h.setState('scripted');
       Sfx.stopBgm(); Sfx.play('clear');
+      return true;
     }
+    return false;
   }
 
   updateEnding() {
     this.et++;
-    const hero = this.hero, h = this.heroine, d = this.door;
+    const hero = this.hero, h = this.heroine, d = this.exitDoor;
     for (const a of [hero, h]) {
       const dx = d.x + (a === hero ? 9 : -9) - a.x;     // stand side by side in the light
       a.vx = Math.abs(dx) > 1 ? sign(dx) * 0.6 : 0;
@@ -849,10 +914,14 @@ class Game {
     for (const l of this.levers) l.draw(ctx, cx, cy);
     for (const g of this.gates) g.draw(ctx, cx, cy);
     for (const p of this.plates) p.draw(ctx, cx, cy, T);
+    for (const b of this.bridges) b.draw(ctx, cx, cy, T);
+    for (const c of this.crumbles) c.draw(ctx, cx, cy);
+    if (this.exitDoor) this.exitDoor.draw(ctx, cx, cy, T);
     w.drawFront(ctx, cx, cy);
     w.drawDecorFront(ctx, cx, cy);
     for (const p of this.portals) p.draw(ctx, cx, cy);
     for (const b of this.blocks) b.draw(ctx, cx, cy);
+    for (const r of this.rocks) r.draw(ctx, cx, cy);
 
     const h = this.heroine;
     if (this.wallShadow) this.drawWallShadow(ctx, cx, cy);
@@ -867,7 +936,9 @@ class Game {
     }
     if (h.state === 'carried' && !h.carriedBy) h.draw(ctx, cx, cy);
     this.hero.draw(ctx, cx, cy);
+    if (h.state === 'hand') this.drawHands(ctx, cx, cy);
     this.particles.draw(ctx, cx, cy);
+    if (this.collapse) this.collapse.draw(ctx, cx, cy);
 
     // bottomless pits fade to black
     const g = ctx.createLinearGradient(0, w.ph - 110 - cy, 0, w.ph - 20 - cy);
@@ -891,6 +962,14 @@ class Game {
     if (this.black > 0) { ctx.fillStyle = `rgba(0,0,0,${this.black})`; ctx.fillRect(0, 0, VW, VH); }
     if (this.state === 'clear') { ctx.fillStyle = '#fffaec'; ctx.fillRect(0, 0, VW, VH); }
     this.drawBubbles(cx, cy);
+  }
+
+  // the two hands joined while they run
+  drawHands(ctx, cx, cy) {
+    const hero = this.hero, h = this.heroine;
+    const ax = hero.x - hero.facing * 5, ay = hero.y - 20, bx = h.x + h.facing * 4, by = h.y - 15;
+    if (Math.hypot(ax - bx, ay - by) > 30) return;
+    pxLine(ctx, ax - cx, ay - cy, bx - cx, by - cy, '#e8b89a');
   }
 
   drawWindowBeams(ctx, cx, cy) {
@@ -925,6 +1004,8 @@ class Game {
     for (const s of this.shrines) { const l = s.light(); if (l) L.push(l); }
     if (this.door) L.push(this.door.light());
     for (const n of this.npcs) { const l = n.light(); if (l) L.push(l); }
+    for (const b of this.bridges) { const l = b.light(); if (l) L.push(l); }
+    if (this.exitDoor) L.push(this.exitDoor.light());
     return L;
   }
 

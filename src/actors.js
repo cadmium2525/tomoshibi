@@ -9,6 +9,7 @@ class Hero extends Body {
     super(x, y, 5, 38);
     this.state = 'normal'; this.t = 0;
     this.coyote = 0; this.jumpBuf = 0; this.attackCd = 0; this.takeoff = 0; this.tipHist = [];
+    this.trail = [];     // recent positions (her path while they run hand in hand)
     this.animDist = 0; this.landT = 0; this.flash = 0; this.pushing = false;
     this.lastSafe = { x, y }; this.hitList = new Set();
   }
@@ -111,6 +112,8 @@ class Hero extends Body {
     if (this.y > w.ph + 48 && this.state !== 'fallout') {
       this.state = 'fallout'; this.t = 0; Sfx.play('fall');
     }
+    this.trail.push({ x: this.x, y: this.y });
+    if (this.trail.length > 20) this.trail.shift();
   }
 
   setState(s) { this.state = s; this.t = 0; }
@@ -349,6 +352,20 @@ class Heroine extends Body {
       case 'scripted':
         this.physics(w);
         break;
+      case 'hand': {
+        // running hand in hand: she follows the path Grey took a few frames ago
+        const tr = hero.trail, p = tr[Math.max(0, tr.length - 11)];
+        if (p) {
+          const px = this.x, py = this.y;
+          if (Math.abs(p.x - hero.x) > 9 || Math.abs(p.y - hero.y) > 2) { this.x = p.x; this.y = p.y; }
+          else this.x = approach(this.x, hero.x - hero.facing * 10, 1.5);
+          this.vx = this.x - px; this.vy = this.y - py;
+          if (Math.abs(this.vx) > 0.05) this.facing = sign(this.vx);
+          this.onGround = w.pointSolid(this.x, this.y + 2, this);
+          if (this.onGround) this.animDist += Math.abs(this.vx);
+        }
+        return;
+      }
     }
     if (this.y > w.ph + 48) {           // safety: never lose her in a pit
       this.x = hero.lastSafe.x; this.y = hero.lastSafe.y; this.vx = this.vy = 0; this.setState('normal');
@@ -446,6 +463,11 @@ class Heroine extends Body {
       case 'down': return 'down';
       case 'getup': return 'sit';
       case 'scripted': return this.scriptFrame || 'idle0';
+      case 'hand':
+        if (!this.onGround) return this.vy < 0 ? 'jump' : 'fall';
+        if (Math.abs(this.vx) > 1.3) return 'run' + (Math.floor(this.animDist / 5) % 6);
+        if (Math.abs(this.vx) > 0.1) return 'walk' + (Math.floor(this.animDist / 2.8) % 8);
+        return 'anx' + (Math.floor(t / 24) % 2);
     }
     switch (this.anim) {
       case 'fall': return this.vy < 0 ? 'jump' : 'fall';

@@ -65,6 +65,27 @@ class Cutscene {
 }
 
 // ---------------------------------------------------------------------------
+// Through the sealed door: the passage beyond, and the cathedral caving in.
+// ---------------------------------------------------------------------------
+function collapseScript() {
+  return [
+    Cut.run((g) => { g.hero.setState('scripted'); g.heroine.setState('scripted'); g.hero.vx = g.heroine.vx = 0; }),
+    Cut.fade(1, 36),
+    Cut.run((g) => g.placeAtEscape()),
+    Cut.fade(0, 36),
+    Cut.say('heroine', '……ここは？', 'her', 60),
+    Cut.run((g) => { g.shake = 6; Sfx.play('door'); Sfx.play('block'); g.heroine.emote('!', 60); }),
+    Cut.wait(30),
+    Cut.talk('グレイ', '地鳴り……！ 聖堂が 崩れはじめている！'),
+    Cut.run((g) => { g.shake = 8; Sfx.play('block'); }),
+    Cut.talk('ルミナ', 'グレイさん……！'),
+    Cut.face('hero', -1),
+    Cut.talk('グレイ', 'ルミナ、手を！ ……離すんじゃないぞ。 走れ！'),
+    Cut.face('hero', 1),
+  ];
+}
+
+// ---------------------------------------------------------------------------
 // Prologue: Marta's letter -> Grey climbs down into the forgotten cathedral ->
 // finds Lumina talking to her own shadow -> she takes his hand -> the seal
 // breaks and the shadows wake up.
