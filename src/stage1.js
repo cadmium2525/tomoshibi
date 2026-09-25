@@ -5,7 +5,7 @@
 // first solid tile under a floor (feet y = surface * 16).
 // ---------------------------------------------------------------------------
 function buildStage1() {
-  const W = 332, H = 48;
+  const W = 424, H = 48;
   const solid = new Uint8Array(W * H).fill(1);
   const noBg = new Uint8Array(W * H);          // 1 = no back wall (parallax shows)
   const ents = [];
@@ -59,6 +59,17 @@ function buildStage1() {
   dec('banner', 33, 7);
   dec('pillar', 24, 6, { to: 14 });
 
+  // ===== Collectibles ==========================================================
+  // 影絵の欠片: memories of her shadow. 灯守りの手記: pages left by an old lamplighter.
+  ent('shard', 3, 15, { id: 'f1' });                  // her cell, behind the bed
+  ent('shard', 40, 22, { id: 'f2' });                 // jump from the lowest ledge of the shaft
+  ent('shard', 80, 29, { id: 'f3' });                 // above the landing between chasms 2 and 3
+  ent('shard', 175, 13, { id: 'f4' });                // above the highest beam of the fragile bridge
+  ent('shard', 350, 16, { id: 'f5' });                // a jump that costs time while the collapse chases
+  ent('page', 41, 33, { id: 'j1' });                  // corner at the bottom of the shaft
+  ent('page', 160, 21, { id: 'j2' });                 // far end of the room of the stone
+  ent('page', 233, 17, { id: 'j3' });                 // shelf at the back of the great hall
+
   // ===== Zone 2: descent shaft ==============================================
   carve(46, 6, 57, 33);
   carve(40, 17, 57, 33);
@@ -103,7 +114,6 @@ function buildStage1() {
   // ===== Zone 5: plate + block puzzle ========================================
   carve(142, 13, 160, 21);             // surface 22
   fill(151, 13, 151, 18);              // wall with gate 2 below
-  fill(144, 21, 144, 21); fill(159, 21, 159, 21);   // curbs keep the block inside the room
   ent('shrine', 143, 21, { id: 's3' });
   ent('sign', 145, 21, { text: 'sign_block' });
   ent('plate', 147, 21, { id: 'p2', gates: ['g2'] });
@@ -153,7 +163,9 @@ function buildStage1() {
     id: 'a2', x0: 221, x1: 224,
     waves: [[{ tx: 217, ty: 21 }, { tx: 227, ty: 21 }], [{ tx: 220, ty: 21 }, { tx: 230, ty: 21 }]],
   });
-  ent('door', 232, 21, { dx: 0 });
+  ent('door', 230, 21, { dx: 0 });
+  fill(236, 20, 236, 21);              // a step, then a shelf (the third page lies there)
+  fill(233, 18, 234, 18);
   dec('pillar', 216, 4, { to: 21 }); dec('pillar', 225, 4, { to: 21 });
   dec('window', 219, 6); dec('window', 228, 6);
   dec('torch', 218, 16); dec('torch', 223, 16); dec('torch', 228, 16); dec('torch', 235, 16);
@@ -164,25 +176,58 @@ function buildStage1() {
   // behind them; Grey runs holding her hand. [x0, x1, surface | null = pit]
   const run = [
     [242, 252, 30], [253, 255, null], [256, 262, 30], [263, 266, 29], [267, 270, 28],
-    [271, 274, null], [275, 282, 27], [283, 292, 25], [293, 295, null], [296, 302, 24],
-    [303, 306, 22], [307, 312, 21], [313, 316, 19], [317, 330, 18],
+    [271, 274, null], [275, 282, 27], [283, 292, 25], [293, 295, null], [296, 310, 24],
+    [311, 318, 'plank'], [319, 324, 24], [325, 328, 22], [329, 331, null], [332, 338, 22],
+    [339, 342, 20], [343, 346, null], [347, 354, 20], [355, 358, 21], [359, 366, 19],
+    [367, 370, null], [371, 378, 18], [379, 382, 16], [383, 392, 16], [393, 396, null],
+    [397, 404, 15], [405, 420, 14],
   ];
   let prev = 30;
   for (const [x0, x1, sf] of run) {
     if (sf === null) { carve(x0, prev - 6, x1, H - 1); sky(x0, prev, x1, H - 1); continue; }
+    if (sf === 'plank') {      // old planks over a pit: they give way under Grey a moment later
+      carve(x0, prev - 6, x1, H - 1); sky(x0, prev, x1, H - 1);
+      for (let x = x0; x <= x1; x++) ent('crumble', x, prev - 1);
+      continue;
+    }
     carve(x0, sf - 6, x1, sf - 1);
     prev = sf;
   }
   ent('escape', 244, 29, { id: 's6' });
-  ent('rock', 259, 29); ent('rock', 279, 26); ent('rock', 289, 24); ent('rock', 309, 20);
-  ent('exit', 326, 17, { dx: 0 });
-  dec('torch', 247, 25); dec('torch', 260, 25); dec('torch', 278, 22); dec('torch', 299, 19); dec('torch', 314, 14);
-  dec('chain', 268, 22, { len: 3 }); dec('chain', 305, 16, { len: 3 });
+  for (const [tx, ty] of [[259, 29], [279, 26], [289, 24], [322, 23], [335, 21], [351, 19], [375, 17], [387, 15]]) ent('rock', tx, ty);
+  ent('exit', 416, 13, { dx: 0 });
+  dec('torch', 247, 25); dec('torch', 260, 25); dec('torch', 278, 22); dec('torch', 299, 19); dec('torch', 321, 19);
+  dec('torch', 336, 17); dec('torch', 352, 15); dec('torch', 374, 13); dec('torch', 390, 11); dec('torch', 410, 9);
+  dec('chain', 268, 22, { len: 3 }); dec('chain', 305, 18, { len: 3 }); dec('chain', 362, 13, { len: 3 });
 
   return { W, H, solid, noBg, ents, decor, name: '忘れられた地下聖堂' };
 }
 
 const N = (who) => `<span class="name">${who}：</span>`;
+
+// memories held by the shadow children (shown when a fragment is found)
+const SHARDS = {
+  f1: 'ちいさな てが、かべに うさぎを つくった。 ぼくは うさぎに なった。',
+  f2: 'ろうそくが ゆれると、ぼくも ゆれた。 あのこは わらった。',
+  f3: 'あのこが なくと、ぼくは おおきく なった。 だきしめたかった。',
+  f4: 'あのこが ねむると、ぼくも ねむった。 おなじ ゆめを みた。',
+  f5: '「きょうも ふたりきり だね」 ……うん。 ずっと いっしょ。',
+};
+// pages of an old lamplighter's notebook
+const PAGES = {
+  j1: { title: '灯守りの手記 その一', body: `
+    <p>灯をともす者は、その灯が落とす影からも 目をそらしてはならない。</p>
+    <p>光あるところ、影は必ず生まれる。 影を嫌う者は、いずれ光までも嫌うようになる。</p>
+    <p>――灯守りの心得より</p>` },
+  j2: { title: '灯守りの手記 その二', body: `
+    <p>この聖堂は、代々の「灯の巫女」が 祈りを捧げた場所だという。</p>
+    <p>巫女の光は あまりに強く、それゆえ 巫女の影もまた深い。 古い巫女たちは 自らの影を 名で呼び、
+       友のように 語りかけたと 碑に残る。</p>` },
+  j3: { title: '灯守りの手記 その三', body: `
+    <p>影を闇に閉じこめても 消えはしない。 ひとりにされた影は、ただ 寂しさの分だけ 大きくなる。</p>
+    <p>影をやわらげるのは 闇ではなく、もうひとつの光だ。</p>
+    <p>……この言葉を、いつか 誰かが 思い出してくれるとよいのだが。</p>` },
+};
 const TEXT = {
   hint_move: N('ヒント') + '{move} で移動、{dash}でダッシュ、{jump} でジャンプ。',
   hint_follow: N('ヒント') + 'ルミナは あなたの後をついてくる。1段の段差や 小さな溝なら 自分で越えられる。',
@@ -198,7 +243,7 @@ const TEXT = {
   sign_pull: N('石碑') + '「高きに登れぬ者あらば 手を差し伸べよ」<br>' + N('ヒント') +
     '2段の段差は ルミナには登れない。上から {down} で 引き上げてあげよう。',
   sign_block: N('石碑') + '「二つの石 一つの門」<br>' + N('ヒント') +
-    '2つの石板は 同じ門につながっている。重たい石でも 石板は沈むだろうか…？（壁に押しつけた石は 崩れて元の場所に戻る）',
+    '2つの石板は 同じ門につながっている。重たい石でも 石板は沈むだろうか…？<br>石の前で {up} で持ち上げ、もう一度 {up} で下ろす。歩いて押すこともできる。',
   plate_hero: N('グレイ') + '…びくともしない。この石板は ルミナにしか応えないようだ。',
   door_sealed: N('グレイ') + '影の気配が 扉を封じている…！',
   door_open: N('グレイ') + '……この扉は、あの子の光にしか 応えないのか。',

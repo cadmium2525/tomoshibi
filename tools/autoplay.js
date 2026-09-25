@@ -5,7 +5,11 @@ window.autoplay = function () {
   const tile = (v) => v / 16;
   const note = (m) => log.push(m + ' ' + JSON.stringify(T.st()));
   const fail = (m) => { note('FAIL ' + m); throw new Error(m + '\n' + log.join('\n')); };
-  function frames(n, keys = [], taps = []) { T.run(n, keys, taps); if (game.state === 'gameover') fail('gameover'); }
+  function frames(n, keys = [], taps = []) {
+    T.run(n, keys, taps);
+    if (game.state === 'gameover') fail('gameover');
+    if (game.state === 'read') { T.run(24); T.run(2, [], ['KeyZ']); note('read a page'); }
+  }
   function walkTo(tx, { dash = false, max = 900 } = {}) {
     let i = 0;
     while (Math.abs(tile(H().x) - tx) > 0.25 && i++ < max) {
@@ -122,7 +126,7 @@ window.autoplay = function () {
   waitFor(() => Y().x > 206 * 16 && Y().state === 'normal', 600, 'she crossed'); note('light bridge done');
   // --- zone 8 hall
   walkTo(222); fight(); waitFor(() => Y().state === 'normal', 300, 'recover2');
-  walkTo(234); waitFor(() => game.state === 'cutscene', 600, 'door');
+  walkTo(231.5); waitFor(() => game.state === 'cutscene', 600, 'door');
   let c = 0; while (game.state === 'cutscene' && c++ < 2000) T.run(1, [], c % 20 === 0 ? ['KeyZ'] : []);
   if (!game.escape) fail('escape did not start');
   // --- zone 9 the collapse

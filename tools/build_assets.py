@@ -43,10 +43,10 @@ def main():
         keep[f"jump{i}"] = hero[f"jump{i}"]
     keep["front"] = hero["front"]
     for k, v in hero.items():
-        if k.startswith("atk"):
+        if k.startswith(("atk", "lift", "carry")):
             keep[k] = v
     im, rects = pack(keep, 512)
-    data["hero"] = {"src": to_data_uri(im), "f": rects, "tip": build_sprites.ATTACK_TIPS}
+    data["hero"] = {"src": to_data_uri(im), "f": rects, "tip": build_sprites.ATTACK_TIPS, "box": build_sprites.BOXES}
     # heroine --------------------------------------------------------------
     F = heroine.frames()
     F["front"] = heroine.front()

@@ -67,8 +67,10 @@ def _small(name):
         for dx in range(-3, 4):
             out[cy, cx + dx] = (*gold, 255)
         out[cy, cx] = (*gem, 255)
-    for ex, ey in c["eyes"]:
-        out[int((ey - y0) * k), int((ex - x0) * k), :3] = c["eye"]
+    # both eyes on one row (a pixel of difference reads as a lopsided face)
+    ey = int((sum(e[1] for e in c["eyes"]) / len(c["eyes"]) - y0) * k)
+    for ex, _ in c["eyes"]:
+        out[ey, int((ex - x0) * k), :3] = c["eye"]
     lamp = ((c["lamp"][0] - x0) * k, (c["lamp"][1] - y0) * k)
     return out, lamp
 

@@ -8,6 +8,7 @@ import os
 import numpy as np
 from PIL import Image
 import attack
+import carry
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "assets", "chars", "oldman")
@@ -101,10 +102,25 @@ def load_frames():
         # tip relative to the feet anchor, in game pixels
         ATTACK_TIPS[f"atk{i}"] = [round((tx - ax) * s_atk, 1), round((ty - y1) * s_atk, 1)]
         frames[f"atk{i}"] = (arr, (ax - x0) * s_atk)
+    # lifting / carrying the weight stone: anchored under the head, box centre exported
+    st = carry.cell(carry.STAND)
+    x0, y0, x1, y1 = opaque_bbox(st, 110)
+    s_car = TARGET_H / (y1 - y0)
+    for name, ids in (("lift", carry.LIFT), ("carry", carry.WALK)):
+        for k, i in enumerate(ids):
+            im = carry.cell(i)
+            x0, y0, x1, y1 = opaque_bbox(im, 110)
+            ax = carry.head_x(im)
+            bx, by = carry.box_center(im)
+            crop = im.crop((x0, y0, x1, y1))
+            arr = np.array(crop.resize((round((x1 - x0) * s_car), round((y1 - y0) * s_car)), Image.BOX)).astype(np.float32)
+            BOXES[f"{name}{k}"] = [round((bx - ax) * s_car, 1), round((by - y1) * s_car, 1)]
+            frames[f"{name}{k}"] = (arr, (ax - x0) * s_car)
     return frames
 
 
 ATTACK_TIPS = {}
+BOXES = {}
 
 
 def alpha_cut(arr, thr=110):
@@ -174,7 +190,7 @@ def hero_items():
         o = add_outline(apply_palette(arr, pal))
         if name == "front":
             out[name] = (o, o.shape[1] // 2, o.shape[0] - 1)
-        elif name.startswith("atk"):
+        elif name.startswith(("atk", "lift", "carry")):
             out[name] = (o, int(round(ax)) + 1, o.shape[0] - 2)
         else:
             out[name] = (place(o, ax), ANCHOR_X, ANCHOR_Y)

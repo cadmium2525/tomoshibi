@@ -194,7 +194,7 @@ function loadSheets() {
   for (const key in ASSETS) {
     const a = ASSETS[key];
     const img = new Image();
-    Sheets[key] = { img, f: a.f || {}, carry: a.carry || {}, tip: a.tip || {}, lamp: a.lamp || {}, white: null, dark: null };
+    Sheets[key] = { img, f: a.f || {}, carry: a.carry || {}, tip: a.tip || {}, box: a.box || {}, lamp: a.lamp || {}, white: null, dark: null };
     jobs.push(new Promise((res) => { img.onload = res; img.src = a.src; }));
   }
   return Promise.all(jobs).then(() => {
@@ -270,6 +270,7 @@ function pxLine(ctx, x0, y0, x1, y1, col) {
 
 // tiny pixel icons drawn above heads (!, ?, heart, note, ...)
 const ICONS = {
+  rabbit: ['#...#..', '#...#..', '##.##..', '.####..', '######.', '.#####.', '..###..'],
   '!': ['.##.', '.##.', '.##.', '.##.', '....', '.##.'],
   '?': ['.###.', '##.##', '...##', '..##.', '.....', '..##.'],
   '♥': ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...'],

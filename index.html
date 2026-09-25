@@ -108,6 +108,8 @@
   /* touch controls */
   #touch { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 4; }
   body.touch #touch { display: block; }
+  /* cutscenes: only the pause (= skip) button stays; tapping the screen advances */
+  body.incut #pad, body.incut .tb, body.incut #bFull { display: none; }
   #pad { position: absolute; left: calc(env(safe-area-inset-left, 0px) + 3vmin);
          bottom: calc(env(safe-area-inset-bottom, 0px) + 4vmin);
          width: min(38vmin, 190px); height: min(38vmin, 190px); border-radius: 50%; pointer-events: auto; touch-action: none;

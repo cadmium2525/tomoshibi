@@ -2,6 +2,7 @@
 // ---------------------------------------------------------------------------
 // Hero (player), Heroine (NPC), Shadow (enemy), Portal
 // ---------------------------------------------------------------------------
+const CARRY_SPEED = 0.55;       // walking with the weight stone in his arms
 const HERO = { walk: 1.25, dash: 2.45, push: 0.55, jump: 4.75 };
 
 class Hero extends Body {
@@ -10,6 +11,7 @@ class Hero extends Body {
     this.state = 'normal'; this.t = 0;
     this.coyote = 0; this.jumpBuf = 0; this.attackCd = 0; this.takeoff = 0; this.tipHist = [];
     this.trail = [];     // recent positions (her path while they run hand in hand)
+    this.held = null;    // the weight stone while he carries it
     this.animDist = 0; this.landT = 0; this.flash = 0; this.pushing = false;
     this.lastSafe = { x, y }; this.hitList = new Set();
   }
@@ -56,10 +58,30 @@ class Hero extends Body {
         } else if (this.onGround && I.down('down') && !dir) {
           this.state = 'reach'; this.t = 0; this.vx = 0;
         } else if (I.pressed('up')) {
-          game.tryLever(this);
+          if (!game.tryLever(this)) game.tryLift(this);
         }
         break;
       }
+      case 'lift':                                // bending down, getting it up to his chest
+        this.vx = 0;
+        if (this.t >= 28) { this.state = 'carry'; this.t = 0; }
+        break;
+      case 'carry': {
+        if (dir) { this.facing = dir; this.vx = approach(this.vx, dir * CARRY_SPEED, 0.08); }
+        else this.vx = approach(this.vx, 0, 0.2);
+        // heavy steps: a thud on every stride, and he breaks a sweat
+        const stride = Math.floor(this.animDist / 11);
+        if (this.onGround && stride !== this.lastStride) { this.lastStride = stride; if (Math.abs(this.vx) > 0.2) Sfx.play('push'); }
+        if (this.t % 70 === 35) {
+          game.particles.add({ x: this.x - this.facing * 3, y: this.y - 42, vx: -this.facing * 0.4, vy: -0.6, g: 0.12, life: 26, col: '#bfe6ff' });
+        }
+        if ((I.pressed('up') || I.pressed('down')) && this.onGround) game.tryPutDown(this);
+        break;
+      }
+      case 'putdown':
+        this.vx = 0;
+        if (this.t >= 22) game.finishPutDown(this);
+        break;
       case 'attack':
         if (this.onGround) this.vx = approach(this.vx, 0, 0.12);
         this.tipHist.push(this.caneTip());
@@ -120,6 +142,7 @@ class Hero extends Body {
 
   knock(dir) {
     if (['hurt', 'fallout', 'catch', 'catchwait', 'pull', 'scripted'].includes(this.state)) return;
+    if (this.held) game.dropHeld(this);
     this.state = 'hurt'; this.t = 0; this.vx = dir * 2.3; this.vy = -2.4; this.flash = 30;
     Sfx.play('hit');
   }
@@ -138,6 +161,9 @@ class Hero extends Body {
     if (s === 'catch') return t < 20 ? 'jump2' : 'jump17';
     if (s === 'pull') return t < 22 ? 'jump1' : t < 32 ? 'jump16' : 'jump18';
     if (s === 'attack') return this.attackFrame();
+    if (s === 'lift') return 'lift' + Math.min(6, Math.floor(this.t / 4));
+    if (s === 'putdown') return 'lift' + Math.max(0, 6 - Math.floor(this.t / 3.4));
+    if (s === 'carry') return Math.abs(this.vx) > 0.1 ? 'carry' + (Math.floor(this.animDist / 3.3) % 7) : 'lift6';
     if (s === 'scripted' && this.front) return 'front';
     if (!this.onGround) {
       if (this.vy < -2.6) return this.takeoff > 0 ? 'jump5' : 'jump6';
@@ -162,6 +188,18 @@ class Hero extends Body {
     const white = this.state === 'hurt' && this.t < 6;
     drawSprite(ctx, 'hero', this.frame(), x, y, this.facing < 0, white ? { white: true } : null);
     if (this.state === 'attack') this.drawCane(ctx, cx, cy);
+    if (this.held) { const p = this.heldPos(); drawTile(ctx, 'block', Math.round(p.x - 8 - cx), Math.round(p.y - 16 - cy)); }
+  }
+
+  // where the stone he holds is drawn (bottom centre), following the painted box
+  heldPos() {
+    const f = this.frame(), o = Sheets.hero.box[f] || [7, -26];
+    let x = this.x + this.facing * (o[0] + 3), y = this.y + o[1] + 8;
+    if (this.state === 'lift' && this.t < 8) {            // slides from where it lay into his hands
+      const k = this.t / 8, b = this.held;
+      x = lerp(b.x, x, k); y = lerp(b.y, y, k);
+    }
+    return { x, y };
   }
 
   // the lamplighter's pole (灯竿): the swing is painted into the attack frames;

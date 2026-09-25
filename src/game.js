@@ -39,6 +39,7 @@ class Game {
     this.bubbleEls = new Map();
     this.stats = { time: 0, grabs: 0, kills: 0, retries: 0 };
     this.checkpoint = null;
+    this.collected = new Set();         // ids of shards / pages found (kept across retries)
     this.state = 'title'; this.st = 0; this.titleSel = 0;
     this.load(null);
     Touch.init(() => this.onInputModeChange());
@@ -52,7 +53,7 @@ class Game {
       const btn = e.target.closest('button');
       if (btn && btn.dataset.cmd) { e.preventDefault(); this.menuCommand(btn.dataset.cmd); return; }
       if (this.state === 'cutscene') Input.tap('jump');     // advance the letter
-      else if (this.state !== 'pause') Input.tap('start');
+      else if (this.state !== 'pause') Input.tap('start');     // also closes a page being read
     });
     document.addEventListener('pointerdown', (e) => {
       if (this.state === 'cutscene' && !e.target.closest('#touch') && !e.target.closest('#center')) Input.tap('jump');
@@ -76,7 +77,7 @@ class Game {
     this.particles = new Particles();
     this.gates = []; this.plates = []; this.levers = []; this.blocks = []; this.shrines = [];
     this.signs = []; this.ambushes = []; this.door = null; this.shadows = []; this.portals = []; this.npcs = [];
-    this.crumbles = []; this.bridges = []; this.rocks = []; this.exitDoor = null; this.escapeSpot = null;
+    this.crumbles = []; this.bridges = []; this.rocks = []; this.exitDoor = null; this.escapeSpot = null; this.items = [];
     this.escape = false; this.collapse = null; this.pendingFall = false;
     for (const e of stage.ents) {
       switch (e.type) {
@@ -91,6 +92,7 @@ class Game {
         case 'ambush': this.ambushes.push(new Ambush(e)); break;
         case 'door': this.door = new Door(e); break;
         case 'crumble': this.crumbles.push(new Crumble(e)); break;
+        case 'shard': case 'page': if (!this.collected.has(e.id)) this.items.push(new Collectible(e)); break;
         case 'lightbridge': this.bridges.push(new LightBridge(e)); break;
         case 'rock': this.rocks.push(new Rock(e)); break;
         case 'escape': this.escapeSpot = { id: e.id, x: e.x, y: e.y, escape: true }; break;
@@ -131,7 +133,7 @@ class Game {
       ambush: this.ambushes.filter((a) => a.done).map((a) => a.id),
       blocks: Object.fromEntries(this.blocks.map((b) => [b.id, { x: b.x, y: b.y }])),
     };
-    Save.write({ chapter: 1, cp: this.checkpoint, stats: this.stats });
+    Save.write({ chapter: 1, cp: this.checkpoint, stats: this.stats, collected: [...this.collected] });
   }
 
   // where to go back to after a fall / being taken: the last lantern, but the
@@ -179,7 +181,7 @@ class Game {
 
   pause() {
     this.state = 'pause';
-    this.showCenter(`<h1>PAUSE</h1>${this.keysHtml()}<div class="menu"><button data-cmd="resume">再開</button>
+    this.showCenter(`<h1>PAUSE</h1><div class="keys">${this.foundHtml()}</div>${this.keysHtml()}<div class="menu"><button data-cmd="resume">再開</button>
       <button data-cmd="retry">最後の灯籠から やり直す</button><button data-cmd="mute">音 ${Sfx.muted ? 'OFF → ON' : 'ON → OFF'}</button></div>
       ${Touch.enabled ? '' : '<div style="margin-top:1em;font-size:0.7em">Enter：再開　R：やり直す　M：音</div>'}`, true);
   }
@@ -210,6 +212,12 @@ class Game {
 
   update() {
     this.st++;
+    // during cutscenes the on-screen pad is hidden (a tap anywhere advances)
+    const cut = this.state === 'cutscene';
+    if (cut !== this.cutUi) {
+      this.cutUi = cut; document.body.classList.toggle('incut', cut);
+      if (cut) for (const k in Input.virt) Input.virt[k] = false;     // a held stick must not stay held
+    }
     if (Input.pressed('mute')) Sfx.toggleMute();
     switch (this.state) {
       case 'title':
@@ -223,6 +231,11 @@ class Game {
         return;
       case 'cutscene':
         this.updateCutscene();
+        return;
+      case 'read':
+        if (this.st > 20 && (Input.pressed('jump') || Input.pressed('start') || Input.pressed('attack') || Input.pressed('call'))) {
+          this.hideCenter(); this.state = 'play';
+        }
         return;
       case 'pause':
         if (Input.pressed('start')) this.menuCommand('resume');
@@ -259,6 +272,7 @@ class Game {
     for (const b of this.blocks) b.update(this);
     for (const c of this.crumbles) c.update(this);
     for (const r of this.rocks) r.update(this);
+    for (const it of this.items) it.update(this);
     for (const p of this.plates) p.update(this);
     for (const b of this.bridges) b.update(this);
     for (const g of this.gates) g.update(this);
@@ -286,6 +300,7 @@ class Game {
     Sfx.unlock(); Sfx.startBgm();
     this.hideCenter();
     this.checkpoint = null; this.stats = { time: 0, grabs: 0, kills: 0, retries: 0 };
+    this.collected = new Set();
     this.load(null);
     this.startPrologue();
   }
@@ -298,6 +313,7 @@ class Game {
     // a cleared chapter starts over from its beginning (chapter 2 is not built yet)
     this.checkpoint = d.cleared.includes(1) ? null : d.cp;
     this.stats = Object.assign({ time: 0, grabs: 0, kills: 0, retries: 0 }, d.cleared.includes(1) ? {} : d.stats);
+    this.collected = new Set(d.collected || []);          // what was found stays found
     this.load(this.checkpoint);
     this.state = 'play';
     this.ui.hud.style.display = 'flex';
@@ -355,7 +371,7 @@ class Game {
     this.ui.skip.style.display = 'none';
     this.ui.hud.style.display = 'flex';
     this.state = 'play';
-    Save.write({ chapter: 1, cp: null, cleared: [], stats: this.stats });
+    Save.write({ chapter: 1, cp: null, cleared: [], stats: this.stats, collected: [...this.collected] });
   }
 
   updateCutscene() {
@@ -501,9 +517,75 @@ class Game {
     }
   }
 
+  // ---- collectibles ----------------------------------------------------------------
+  collect(it) {
+    this.items = this.items.filter((x) => x !== it);
+    this.collected.add(it.id);
+    Sfx.play('save');
+    this.particles.burst(it.x, it.y, 12, { col: it.kind === 'shard' ? '#c8a8ff' : '#ffe6a0', life: 26, max: 1.2 });
+    if (it.kind === 'shard') {
+      const n = Object.keys(SHARDS).filter((k) => this.collected.has(k)).length;
+      this.notify(`<span class="name">影絵の欠片 ${n}/${Object.keys(SHARDS).length}</span>「${SHARDS[it.id]}」`, 300, true);
+    } else {
+      const p = PAGES[it.id];
+      this.state = 'read'; this.st = 0;
+      this.showCenter(`<div class="letter"><p class="sig" style="text-align:left">${p.title}</p>${p.body}<div class="more">▼</div></div>`, true);
+    }
+  }
+  countFound(table) { return Object.keys(table).filter((k) => this.collected.has(k)).length; }
+  foundHtml() {
+    return `<b>影絵の欠片</b>${this.countFound(SHARDS)} / ${Object.keys(SHARDS).length}<br>
+      <b>灯守りの手記</b>${this.countFound(PAGES)} / ${Object.keys(PAGES).length}`;
+  }
+
   tryLever(hero) {
     for (const l of this.levers) if (l.near(hero)) { l.pull(this); return true; }
     return false;
+  }
+
+  // ---- the weight stone: ↑ in front of it to lift, ↑/↓ to set it down ------------
+  liftable(hero) {
+    if (!hero.onGround) return null;
+    return this.blocks.find((b) => !b.hidden && !b.carried && b.onGround && Math.abs(b.y - hero.y) < 2 &&
+      (b.x - hero.x) * hero.facing > 6 && (b.x - hero.x) * hero.facing < 24) || null;
+  }
+  tryLift(hero) {
+    const b = this.liftable(hero);
+    if (!b) return false;
+    hero.held = b; b.carried = true;
+    hero.state = 'lift'; hero.t = 0; hero.vx = 0;
+    Sfx.play('block');
+    if (!this.flags.liftMsg) { this.flags.liftMsg = true; this.say(hero, 'ぬう…っ！ ……重い。', 'hero', 80); }
+    return true;
+  }
+  // where the stone would land in front of him; null if there is no room
+  putDownSpot(hero) {
+    const x = hero.x + hero.facing * (hero.hw + 9), y = hero.y, w = this.world;
+    if (w.boxHit(x - 8, y - 16, x + 8, y - 0.5)) return null;
+    if (!w.pointSolid(x, y + 2)) return null;
+    const box = { x0: x - 8, y0: y - 16, x1: x + 8, y1: y };
+    if ([this.heroine, ...this.shadows.filter((s) => s.alive)].some((a) => a.state !== 'carried' && overlap(box, a.box()))) return null;
+    return { x, y };
+  }
+  tryPutDown(hero) {
+    if (!this.putDownSpot(hero)) { Sfx.play('plateoff'); return; }
+    hero.state = 'putdown'; hero.t = 0;
+  }
+  finishPutDown(hero) {
+    const p = this.putDownSpot(hero), b = hero.held;
+    if (!p) { hero.state = 'carry'; hero.t = 0; return; }
+    b.x = p.x; b.y = p.y; b.vy = 0; b.carried = false; b.onGround = true;
+    hero.held = null; hero.state = 'normal'; hero.t = 0;
+    this.shake = 2; Sfx.play('block');
+    this.particles.burst(p.x, p.y - 2, 6, { col: '#8a8070', life: 18, max: 1 });
+  }
+  // knocked over while carrying: the stone falls where it can (or back home)
+  dropHeld(hero) {
+    const b = hero.held;
+    hero.held = null; b.carried = false;
+    const p = this.putDownSpot(hero);
+    if (p) { b.x = p.x; b.y = p.y; } else { b.x = b.home.x; b.y = b.home.y; }
+    b.vy = 0;
   }
 
   attackHit(hero, box) {
@@ -612,7 +694,7 @@ class Game {
   }
 
   solidsForGate() {
-    const out = [this.hero, ...this.blocks.filter((b) => !b.hidden), ...this.shadows.filter((s) => s.alive)];
+    const out = [this.hero, ...this.blocks.filter((b) => !b.hidden && !b.carried), ...this.shadows.filter((s) => s.alive)];
     if (this.heroine.state !== 'carried') out.push(this.heroine);
     return out;
   }
@@ -763,7 +845,7 @@ class Game {
     if (this.et % 3 === 0) this.particles.add({ x: d.x + rand(-20, 20), y: d.y - rand(0, 40), vy: -0.5, life: 50, col: '#fff6d0' });
     if (this.et === 160) {
       this.state = 'clear'; this.st = 0;
-      Save.write({ chapter: 1, cp: null, cleared: [1], stats: this.stats });
+      Save.write({ chapter: 1, cp: null, cleared: [1], stats: this.stats, collected: [...this.collected] });
       this.ui.hud.style.display = 'none'; this.ui.msg.style.display = 'none';
       for (const b of this.bubbleEls.values()) b.t = 0;
       const s = this.stats;
@@ -771,7 +853,7 @@ class Game {
       this.showCenter(`<h1>第1章 クリア</h1><h2>忘れられた地下聖堂</h2>
         <div class="quote">「これが……そと？」<br>「ああ。――夜明けだ。」</div>
         <div class="keys"><b>クリアタイム</b>${Math.floor(sec / 60)}分${String(sec % 60).padStart(2, '0')}秒<br>
-        <b>さらわれた回数</b>${s.grabs} 回<br><b>光へ還した影</b>${s.kills} 体<br><b>やり直し</b>${s.retries} 回</div>
+        <b>さらわれた回数</b>${s.grabs} 回<br><b>光へ還した影</b>${s.kills} 体<br><b>やり直し</b>${s.retries} 回<br>${this.foundHtml()}</div>
         <div style="margin-top:1em;font-size:0.8em">第2章「薄明の森」へ つづく</div>
         <div class="blink" style="margin-top:1em">${Touch.enabled ? 'タップで' : 'Z：'}タイトルへ</div>`, false, true);
     }
@@ -922,6 +1004,7 @@ class Game {
     for (const p of this.portals) p.draw(ctx, cx, cy);
     for (const b of this.blocks) b.draw(ctx, cx, cy);
     for (const r of this.rocks) r.draw(ctx, cx, cy);
+    for (const it of this.items) it.draw(ctx, cx, cy);
 
     const h = this.heroine;
     if (this.wallShadow) this.drawWallShadow(ctx, cx, cy);
@@ -1005,6 +1088,7 @@ class Game {
     if (this.door) L.push(this.door.light());
     for (const n of this.npcs) { const l = n.light(); if (l) L.push(l); }
     for (const b of this.bridges) { const l = b.light(); if (l) L.push(l); }
+    for (const it of this.items) L.push(it.light());
     if (this.exitDoor) L.push(this.exitDoor.light());
     return L;
   }
@@ -1062,6 +1146,8 @@ class Game {
     const hero = this.hero, h = this.heroine;
     const bob = Math.round(Math.sin(this.t * 0.15) * 1.5);
     for (const l of this.levers) if (!l.on && l.near(hero)) drawIcon(ctx, '↑', l.x - cx, l.y - 18 - cy + bob, '#2040a0');
+    const b = hero.state === 'normal' && this.liftable(hero);
+    if (b) drawIcon(ctx, '↑', b.x - cx, b.y - 24 - cy + bob, '#2040a0');
     // show ↓ when kneeling would help her
     if (hero.state === 'normal' && h.stuckT > 30 && this.reachPlan()) drawIcon(ctx, '↓', hero.x - cx, hero.y - hero.h - 8 - cy + bob, '#2040a0');
   }

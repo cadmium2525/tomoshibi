@@ -47,7 +47,7 @@ class Plate {
     const h = game.heroine;
     let p = false;
     if (h.onGround && ['normal', 'getup', 'down'].includes(h.state) && Math.abs(h.x - this.x) <= 11 && Math.abs(h.y - this.y) <= 2) p = true;
-    for (const b of game.blocks) if (!b.hidden && b.onGround && Math.abs(b.x - this.x) <= 10 && Math.abs(b.y - this.y) <= 2) p = true;
+    for (const b of game.blocks) if (!b.hidden && !b.carried && b.onGround && Math.abs(b.x - this.x) <= 10 && Math.abs(b.y - this.y) <= 2) p = true;
     if (p !== this.pressed) Sfx.play(p ? 'plate' : 'plateoff');
     this.pressed = p;
     const hero = game.hero;
@@ -78,9 +78,10 @@ class Block extends Body {
     super(e.x, e.y, 8, 16); this.id = e.id; this.sndT = 0;
     this.home = { x: e.x, y: e.y }; this.hidden = false; this.resetT = 0;
   }
-  solidBox() { return this.hidden ? null : this.box(); }
+  solidBox() { return this.hidden || this.carried ? null : this.box(); }
   update(game) {
     if (this.sndT > 0) this.sndT--;
+    if (this.carried) return;
     if (this.hidden) {
       // reform at home once nobody stands there
       if (--this.resetT <= 0) {
@@ -95,14 +96,13 @@ class Block extends Body {
     }
     this.vx = 0;
     this.physics(game.world, 6);
-    // jammed against a wall it could never be pushed back from: crumble and reform at home
+    // lost down a pit: it crumbles away and reforms where it first stood
+    // (pushed into a corner is fine now: it can always be lifted out again)
     const w = game.world;
-    if (this.onGround && (this.x !== this.home.x || this.y !== this.home.y) &&
-        (w.boxHitTiles(this.x - 9, this.y - 14, this.x - 8, this.y - 2) || w.boxHitTiles(this.x + 8, this.y - 14, this.x + 9, this.y - 2))) {
+    if (this.y > w.ph + 16) {
       this.hidden = true; this.resetT = 70;
-      for (let i = 0; i < 18; i++) game.particles.add({ x: this.x + rand(-8, 8), y: this.y - rand(0, 16), vx: rand(-0.6, 0.6), vy: rand(-1.6, -0.2), g: 0.12, life: rand(20, 36), col: i % 2 ? '#8a8070' : '#5a5448', size: 2 });
       Sfx.play('block');
-      game.say(game.hero, '石が崩れた…元の場所に戻ったようだ。', 'hero', 90);
+      game.say(game.hero, '石が落ちてしまった…元の場所に戻ったようだ。', 'hero', 90);
     }
   }
   push(game, dx) {
@@ -117,7 +117,7 @@ class Block extends Body {
     if (game.t % 4 === 0) game.particles.add({ x: this.x - sign(dx) * 8, y: this.y - 1, vy: -0.3, vx: -sign(dx) * 0.3, life: 14, col: '#6a6270' });
     return dx;
   }
-  draw(ctx, cx, cy) { if (!this.hidden) drawTile(ctx, 'block', this.x - 8 - cx, this.y - 16 - cy); }
+  draw(ctx, cx, cy) { if (!this.hidden && !this.carried) drawTile(ctx, 'block', this.x - 8 - cx, this.y - 16 - cy); }
 }
 
 class Shrine {
@@ -136,6 +136,39 @@ class Shrine {
   }
   draw(ctx, cx, cy) { drawTile(ctx, this.lit ? 'shrine_on' : 'shrine_off', this.x - 8 - cx, this.y - 28 - cy); }
   light() { return this.lit ? { x: this.x, y: this.y - 12, r: 46, a: 0.8, col: 'rgba(120,230,255,0.12)' } : null; }
+}
+
+// A fragment of shadow-play (shard) or a page of the lamplighter's notebook.
+class Collectible {
+  constructor(e) { this.kind = e.type; this.id = e.id; this.x = e.x; this.y = e.y - 10; this.t = Math.random() * 100; }
+  box() { return { x0: this.x - 6, x1: this.x + 6, y0: this.y - 7, y1: this.y + 7 }; }
+  update(game) {
+    this.t++;
+    if (overlap(this.box(), game.hero.box())) game.collect(this);
+  }
+  draw(ctx, cx, cy) {
+    const x = Math.round(this.x - cx), y = Math.round(this.y - cy + Math.sin(this.t * 0.08) * 1.5);
+    if (this.kind === 'shard') {
+      // a little shadow-puppet rabbit, with a violet shimmer
+      const g = ICONS.rabbit, ox = x - 3, oy = y - 4;
+      for (let j = 0; j < g.length; j++) for (let i = 0; i < g[j].length; i++) {
+        if (g[j][i] !== '#') continue;
+        ctx.fillStyle = '#b890ff'; ctx.fillRect(ox + i - 1, oy + j, 3, 1); ctx.fillRect(ox + i, oy + j - 1, 1, 3);
+      }
+      ctx.fillStyle = '#1c1030';
+      for (let j = 0; j < g.length; j++) for (let i = 0; i < g[j].length; i++) if (g[j][i] === '#') ctx.fillRect(ox + i, oy + j, 1, 1);
+      if (Math.floor(this.t / 6) % 8 === 0) { ctx.fillStyle = '#e0c8ff'; ctx.fillRect(x + 3, y - 4, 1, 1); }
+    } else {
+      ctx.fillStyle = '#5a4020'; ctx.fillRect(x - 4, y - 5, 9, 11);
+      ctx.fillStyle = '#efe3c4'; ctx.fillRect(x - 3, y - 5, 8, 10);
+      ctx.fillStyle = '#9a8060'; for (let i = 0; i < 4; i++) ctx.fillRect(x - 2, y - 3 + i * 2, 5 - (i === 3 ? 2 : 0), 1);
+    }
+  }
+  light() {
+    return this.kind === 'shard'
+      ? { x: this.x, y: this.y, r: 18, a: 0.6, col: 'rgba(170,120,255,0.12)' }
+      : { x: this.x, y: this.y, r: 20, a: 0.6, col: 'rgba(255,220,150,0.12)' };
+  }
 }
 
 class Sign {
@@ -309,7 +342,7 @@ class Collapse {
     this.t++;
     const hero = game.hero;
     // eases in, then keeps a steady pace a little slower than a dash
-    this.speed = Math.min(1.95, this.speed + 0.02);
+    this.speed = Math.min(2.15, this.speed + 0.02);
     const gap = hero.x - this.x;
     this.x += this.speed + (gap > 230 ? 1.2 : 0);           // never falls hopelessly behind
     if (this.t % 12 === 0) game.shake = Math.max(game.shake, 2);
