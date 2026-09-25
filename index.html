@@ -63,6 +63,12 @@
   #center button { font: inherit; font-size: 0.85em; color: #f4f0ff; background: linear-gradient(#2b3c9c, #101a5c);
                    border: 0.18em solid #e8e8f8; border-radius: 0.4em; padding: 0.5em 1em; cursor: pointer; }
   #center.dark { background: rgba(0, 0, 0, 0.62); }
+  #center .title-menu { flex-direction: column; align-items: center; gap: 0.5em; margin: 0; }
+  /* keep the key visual's two figures (left of centre) clear */
+  #center.title .press:has(.title-menu) { align-self: flex-end; margin-right: 7vw; }
+  #center .title-menu button { min-width: 9em; opacity: 0.75; }
+  #center .title-menu button.sel { opacity: 1; border-color: #ffe08a; box-shadow: 0 0 0.8em rgba(255, 220, 140, 0.55); }
+  #center .title-menu button.sel::before { content: '▶ '; color: #ffe08a; }
   /* title screen over the key visual: logo in the dark upper part, prompt at the bottom */
   #center.title { justify-content: flex-start; padding-top: calc(env(safe-area-inset-top, 0px) + 7vh);
                   background: linear-gradient(rgba(0, 0, 0, 0.45), transparent 38%, transparent 72%, rgba(0, 0, 0, 0.55)); }

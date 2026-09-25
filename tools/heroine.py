@@ -17,6 +17,7 @@ FRONT = os.path.join(ROOT, "assets", "chars", "lumina", "front.png")
 
 W, H = 40, 44                 # output frame
 AX, AY = 20, 42               # feet anchor inside the frame
+CAX = 32                      # hip x of the carried pose (its frame is wider: the head hangs far out)
 FIG_H = 36                    # figure height in game pixels (hero is 46)
 S = 8                         # work resolution multiplier
 BW, BH = 64, 58               # big work canvas (game px) - room for rotations
@@ -98,6 +99,7 @@ BASE = dict(
     thigh_b=0.0, knee_b=0.0, thigh_f=0.0, knee_f=0.0,
     arms=None,                      # None = painted clasped hands; else dict(arm_f, elb_f, arm_b, elb_b)
     eyes="open",
+    fw=None,                        # frame width override (the carried pose is lying down)
 )
 STAND_HIP_Y = AY - (LEG_THIGH + LEG_SHIN) - 0.8
 
@@ -182,9 +184,10 @@ def draw(**kw):
     # crop the frame so the hip lands on pos (default: standing position)
     tx, ty = p["pos"] if p["pos"] else (AX, STAND_HIP_Y + p["crouch"] + p["bob"])
     x0, y0 = int(round(hip[0] - tx)), int(round(hip[1] - ty))
-    frame = np.zeros((H, W, 4), np.float32)
+    fw = p["fw"] or W
+    frame = np.zeros((H, fw, 4), np.float32)
     sx0, sy0 = max(0, x0), max(0, y0)
-    sx1, sy1 = min(BW, x0 + W), min(BH, y0 + H)
+    sx1, sy1 = min(BW, x0 + fw), min(BH, y0 + H)
     frame[sy0 - y0:sy1 - y0, sx0 - x0:sx1 - x0] = big[sy0:sy1, sx0:sx1]
     arr = snap(frame, PALETTE)
     if p["eyes"] == "closed":
@@ -269,7 +272,7 @@ def frames():
                               arms=dict(arm_f=D(160), elb_f=D(75), arm_b=D(150), elb_b=D(80)))
     # carried over a shoulder: body horizontal, head hanging behind. Anchor = hip.
     for i in range(2):
-        F[f"carried{i}"] = draw(root=-95, pos=(AX, 22), thigh_f=D(-35 + 25 * i), knee_f=D(-70),
+        F[f"carried{i}"] = draw(root=-95, pos=(CAX, 22), fw=BW, thigh_f=D(-35 + 25 * i), knee_f=D(-70),
                                 thigh_b=D(-10 - 25 * i), knee_b=D(-80), eyes="closed" if i else "open",
                                 arms=dict(arm_f=D(-95 - 30 * i), elb_f=D(-10), arm_b=D(-70 - 25 * i), elb_b=D(-20)))
     F["down"] = draw(root=-90, pos=(AX + 4, 34.5), thigh_f=D(25), knee_f=D(45), thigh_b=D(10), knee_b=D(30), eyes="closed")
@@ -282,7 +285,7 @@ def frames():
     return F
 
 
-ANCHORS = {"carried0": (AX, 22), "carried1": (AX, 22)}
+ANCHORS = {"carried0": (CAX, 22), "carried1": (CAX, 22)}
 
 
 if __name__ == "__main__":

@@ -94,10 +94,7 @@ class Hero extends Body {
         break;
       case 'fallout':
         this.vx = 0; this.vy = 0;
-        if (this.t === 40) {
-          this.x = this.lastSafe.x; this.y = this.lastSafe.y;
-          this.state = 'normal'; this.flash = 60;
-        }
+        if (this.t === 22) game.pendingFall = true;   // screen is black: back to the last lantern
         return;
       case 'scripted':
         break;

@@ -1,7 +1,7 @@
 // paste into the browser console (or load with ?debug) to drive the game frame by frame
 window.T = {
   run(frames, keys = [], taps = []) {
-    if (game.state === 'title') { Input.taps.add('Enter'); Input.poll(); game.update(); }
+    if (game.state === 'title') game.startNew();
     if (game.state === 'cutscene') game.finishPrologue();     // tests start right after the prologue
     for (let i = 0; i < frames; i++) {
       Input.keys.clear(); keys.forEach((k) => Input.keys.add(k));
