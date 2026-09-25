@@ -7,6 +7,7 @@ and adds a dark outline.
 import os
 import numpy as np
 from PIL import Image
+import attack
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "assets", "chars", "oldman")
@@ -81,7 +82,29 @@ def load_frames():
     for i, c in enumerate(jump_cells):
         frames[f"jump{i}"] = shrink(c, s_jump)
     frames["front"] = shrink(idle, s_idle)
+    # attack swing: same size as the idle pose; anchor between the feet
+    cells = attack.cells()
+    s_atk = None
+    for i in attack.PICK:
+        rgba, fire = attack.clean(cells[i])
+        im = Image.fromarray(rgba)
+        x0, y0, x1, y1 = opaque_bbox(im, 110)
+        if s_atk is None:   # first pick: wind-up, pole held at head height
+            s_atk = TARGET_H * 0.97 / (y1 - y0)
+        a = rgba[..., 3] >= 110
+        ys, xs = np.nonzero(a)
+        ax = float(np.median(xs[ys >= y1 - (y1 - y0) * 0.08]))
+        crop = im.crop((x0, y0, x1, y1))
+        nw, nh = round((x1 - x0) * s_atk), round((y1 - y0) * s_atk)
+        arr = np.array(crop.resize((nw, nh), Image.BOX)).astype(np.float32)
+        tx, ty = attack.tip(rgba, fire)
+        # tip relative to the feet anchor, in game pixels
+        ATTACK_TIPS[f"atk{i}"] = [round((tx - ax) * s_atk, 1), round((ty - y1) * s_atk, 1)]
+        frames[f"atk{i}"] = (arr, (ax - x0) * s_atk)
     return frames
+
+
+ATTACK_TIPS = {}
 
 
 def alpha_cut(arr, thr=110):
@@ -151,6 +174,8 @@ def hero_items():
         o = add_outline(apply_palette(arr, pal))
         if name == "front":
             out[name] = (o, o.shape[1] // 2, o.shape[0] - 1)
+        elif name.startswith("atk"):
+            out[name] = (o, int(round(ax)) + 1, o.shape[0] - 2)
         else:
             out[name] = (place(o, ax), ANCHOR_X, ANCHOR_Y)
     return out

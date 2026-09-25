@@ -8,7 +8,7 @@ class Hero extends Body {
   constructor(x, y) {
     super(x, y, 5, 38);
     this.state = 'normal'; this.t = 0;
-    this.coyote = 0; this.jumpBuf = 0; this.attackCd = 0; this.takeoff = 0;
+    this.coyote = 0; this.jumpBuf = 0; this.attackCd = 0; this.takeoff = 0; this.tipHist = [];
     this.animDist = 0; this.landT = 0; this.flash = 0; this.pushing = false;
     this.lastSafe = { x, y }; this.hitList = new Set();
   }
@@ -51,7 +51,7 @@ class Hero extends Body {
         }
         if (I.released('jump') && this.vy < -1.6) this.vy *= 0.5;
         if (I.pressed('attack') && this.attackCd <= 0) {
-          this.state = 'attack'; this.t = 0; this.hitList.clear(); Sfx.play('swing');
+          this.state = 'attack'; this.t = 0; this.hitList.clear(); this.tipHist = []; Sfx.play('swing');
         } else if (this.onGround && I.down('down') && !dir) {
           this.state = 'reach'; this.t = 0; this.vx = 0;
         } else if (I.pressed('up')) {
@@ -61,6 +61,8 @@ class Hero extends Body {
       }
       case 'attack':
         if (this.onGround) this.vx = approach(this.vx, 0, 0.12);
+        this.tipHist.push(this.caneTip());
+        if (this.tipHist.length > 5) this.tipHist.shift();
         if (this.t >= 4 && this.t <= 12 && this.t % 2 === 0) {
           const tip = this.caneTip();
           game.particles.add({ x: tip.x, y: tip.y - 2, vx: rand(-0.6, 0.6), vy: rand(-1.4, -0.4), life: rand(12, 22),
@@ -135,7 +137,7 @@ class Hero extends Body {
     if (s === 'reach' || s === 'catchwait') return 'jump1';
     if (s === 'catch') return t < 20 ? 'jump2' : 'jump17';
     if (s === 'pull') return t < 22 ? 'jump1' : t < 32 ? 'jump16' : 'jump18';
-    if (s === 'attack') return t < 4 ? 'jump4' : t < 12 ? 'run2' : 'jump17';
+    if (s === 'attack') return this.attackFrame();
     if (s === 'scripted' && this.front) return 'front';
     if (!this.onGround) {
       if (this.vy < -2.6) return this.takeoff > 0 ? 'jump5' : 'jump6';
@@ -159,14 +161,19 @@ class Hero extends Body {
     const x = this.x - cx, y = this.y - cy;
     const white = this.state === 'hurt' && this.t < 6;
     drawSprite(ctx, 'hero', this.frame(), x, y, this.facing < 0, white ? { white: true } : null);
-    if (this.state === 'attack') this.drawCane(ctx, x, y);
+    if (this.state === 'attack') this.drawCane(ctx, cx, cy);
   }
 
-  // the lamplighter's pole (灯竿): raised behind, then swung forward
-  caneAngle() { return this.t < 3 ? -2.5 : lerp(-2.5, 0.75, clamp((this.t - 3) / 6, 0, 1)); }
+  // the lamplighter's pole (灯竿): the swing is painted into the attack frames;
+  // the old ember at its tip and its trail are drawn here
+  attackFrame() {
+    const t = this.t;
+    return t < 2 ? 'atk0' : t < 3 ? 'atk8' : t < 4 ? 'atk10' : t < 5 ? 'atk12' : t < 6 ? 'atk13'
+      : t < 8 ? 'atk15' : t < 10 ? 'atk38' : t < 14 ? 'atk40' : t < 16 ? 'atk45' : 'atk50';
+  }
   caneTip() {
-    const f = this.facing, a = this.caneAngle();
-    return { x: this.x + f * 7 + Math.cos(a) * 17 * f, y: this.y - 25 + Math.sin(a) * 17 };
+    const o = Sheets.hero.tip[this.attackFrame()] || [16, -24];
+    return { x: this.x + o[0] * this.facing, y: this.y + o[1] };
   }
   // how strongly the old ember at its tip burns (0..1); it flares during the swing
   caneFlare() {
@@ -175,32 +182,23 @@ class Hero extends Body {
     return t < 3 ? 0.35 : t <= 10 ? 1 : Math.max(0.25, 1 - (t - 10) / 8);
   }
 
-  drawCane(ctx, x, y) {
-    const t = this.t, f = this.facing;
-    const hx = x + f * 7, hy = y - 25;
-    const a = this.caneAngle();
-    // trail of fire
-    if (t >= 4 && t <= 12) {
-      for (let j = 1; j <= 5; j++) {
-        const aa = a - j * 0.28;
-        if (aa < -2.5) break;
-        ctx.fillStyle = j < 2 ? '#fff2b0' : j < 4 ? '#ffb040' : '#e0602a';
-        ctx.globalAlpha = 1 - j / 6;
-        for (let r = 14; r <= 19; r += 1) ctx.fillRect(Math.round(hx + Math.cos(aa) * r * f), Math.round(hy + Math.sin(aa) * r), 1, 1);
-      }
-      ctx.globalAlpha = 1;
+  drawCane(ctx, cx, cy) {
+    const t = this.t;
+    // trail of fire along the path the tip has just swept
+    const h = this.tipHist;
+    for (let j = h.length - 1; j > 0; j--) {
+      const k = (h.length - j) / h.length;
+      ctx.globalAlpha = 0.9 * (1 - k);
+      pxLine(ctx, h[j].x - cx, h[j].y - cy - 1, h[j - 1].x - cx, h[j - 1].y - cy - 1, k < 0.35 ? '#fff2b0' : k < 0.7 ? '#ffb040' : '#e0602a');
     }
-    const ex = hx + Math.cos(a) * 17 * f, ey = hy + Math.sin(a) * 17;
-    pxLine(ctx, hx, hy, ex, ey, '#5a3a22');
-    pxLine(ctx, hx, hy + 1, ex, ey + 1, '#2a180e');
-    ctx.fillStyle = '#c8d0e0'; ctx.fillRect(Math.round(hx) - 1, Math.round(hy) - 1, 2, 2);
-    // brass cap and its flame (flames always rise, whatever the pole's angle)
-    const px = Math.round(ex), py = Math.round(ey), fl = this.caneFlare(), w = t % 6 < 3 ? 0 : 1;
-    ctx.fillStyle = '#b8862c'; ctx.fillRect(px - 1, py - 1, 3, 2);
-    const h = fl > 0.6 ? 5 : 3;
-    ctx.fillStyle = '#e0602a'; ctx.fillRect(px - 1, py - h + 1, 3, h - 1);
-    ctx.fillStyle = '#ffb040'; ctx.fillRect(px - 1 + w, py - h, 2, h - 1);
-    ctx.fillStyle = '#fff4c0'; ctx.fillRect(px, py - h + 2, 1, Math.max(1, h - 3));
+    ctx.globalAlpha = 1;
+    // the ember (flames always rise, whatever the pole's angle)
+    const tip = this.caneTip();
+    const px = Math.round(tip.x - cx), py = Math.round(tip.y - cy), fl = this.caneFlare(), w = t % 6 < 3 ? 0 : 1;
+    const fh = fl > 0.6 ? 5 : 3;
+    ctx.fillStyle = '#e0602a'; ctx.fillRect(px - 1, py - fh + 1, 3, fh - 1);
+    ctx.fillStyle = '#ffb040'; ctx.fillRect(px - 1 + w, py - fh, 2, fh - 1);
+    ctx.fillStyle = '#fff4c0'; ctx.fillRect(px, py - fh + 2, 1, Math.max(1, fh - 3));
   }
 }
 
