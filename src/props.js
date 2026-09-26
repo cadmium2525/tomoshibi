@@ -381,12 +381,15 @@ class Collapse {
   draw(ctx, cx, cy) {
     const x = Math.round(this.x - cx);
     if (this.style === 'guards') {
-      // three guards running along the roofs just behind the front line
+      // three guards running over the roofs along the very path Grey took (leaping where he leapt)
+      const P = game.pathLog || [];
       for (let i = 0; i < 3; i++) {
-        const gx = this.x - 6 - i * 22, g = game.world;
-        let gy = this.y;
-        for (let yy = game.hero.y - 90; yy < game.hero.y + 140; yy += 2) if (g.pointSolid(gx, yy)) { gy = yy; break; }
-        drawSprite(ctx, 'guard', 'run' + (Math.floor(this.t / 5 + i * 2) % 6), gx - cx, Math.round(gy) - cy, false);
+        const gx = this.x - 6 - i * 22;
+        let k = P.length - 1;
+        while (k > 0 && P[k].x > gx) k--;
+        const a = P[k], b = P[Math.min(P.length - 1, k + 1)], f = b.x > a.x ? clamp((gx - a.x) / (b.x - a.x), 0, 1) : 0;
+        const gy = lerp(a.y, b.y, f), air = !a.g || !b.g;
+        drawSprite(ctx, 'guard', air ? 'run2' : 'run' + (Math.floor(this.t / 5 + i * 2) % 6), gx - cx, Math.round(gy) - cy, false);
       }
       return;
     }
@@ -515,6 +518,7 @@ class Lamp {
   constructor(e) { this.id = e.id; this.x = e.x; this.y = e.y; this.lit = false; this.by = null; this.t = 0; this.guard = e.guard || null; }
   update(game) {
     this.t++;
+    if (!this.by || this.by.state !== 'snuff') this.dying = 0;
     const h = game.heroine;
     if (!this.lit && !h.hooded && h.onGround && h.state === 'normal' && Math.abs(h.x - this.x) < 10 && Math.abs(h.y - this.y) < 4) {
       this.lit = true; Sfx.play('save');
@@ -522,6 +526,29 @@ class Lamp {
     }
   }
   lightPos() { return { x: this.x, y: this.y - 42 }; }
-  draw(ctx, cx, cy) { drawTile(ctx, this.lit ? 'lamp_on' : 'lamp_off', Math.round(this.x - 8 - cx), Math.round(this.y - 48 - cy)); }
-  light() { return this.lit ? { x: this.x, y: this.y - 40, r: 80 + Math.sin(this.t * 0.2) * 2, a: 0.9, col: 'rgba(255,190,110,0.16)' } : null; }
+  // while a guard smothers it the flame gutters: flickers more and more, then goes out
+  flick() { const d = this.dying || 0; return d > 0 && Math.sin(this.t * (0.6 + d)) + Math.random() * 0.8 < d * 1.6 - 0.4; }
+  draw(ctx, cx, cy) { drawTile(ctx, this.lit && !this.flick() ? 'lamp_on' : 'lamp_off', Math.round(this.x - 8 - cx), Math.round(this.y - 48 - cy)); }
+  light() {
+    if (!this.lit) return null;
+    const k = 1 - 0.7 * (this.dying || 0);
+    return { x: this.x, y: this.y - 40, r: (80 + Math.sin(this.t * 0.2) * 2) * k, a: 0.9 * (this.flick() ? 0.4 : 1), col: `rgba(255,190,110,${0.16 * k})` };
+  }
+}
+
+// A pole or a line strung high up: Grey can land on it from above and jump up
+// through it from below; nobody else uses it.
+class Pole {
+  constructor(e) { this.x = e.x - 8; this.y = e.y; this.w = (e.w || 1) * TILE; }
+  solidBox(self) {
+    if (!(self instanceof Hero) || self.y > this.y + 0.5) return null;
+    return { x0: this.x, x1: this.x + this.w, y0: this.y, y1: this.y + 3 };
+  }
+  draw(ctx, cx, cy) {
+    const x = Math.round(this.x - cx), y = Math.round(this.y - cy);
+    ctx.fillStyle = '#1a1014'; ctx.fillRect(x - 1, y, this.w + 2, 4);
+    ctx.fillStyle = '#7a5a3c'; ctx.fillRect(x, y, this.w, 2);
+    ctx.fillStyle = '#9a7a54'; ctx.fillRect(x, y, this.w, 1);
+    ctx.fillStyle = '#3a2620'; ctx.fillRect(x, y + 2, 2, 6); ctx.fillRect(x + this.w - 2, y + 2, 2, 6);
+  }
 }

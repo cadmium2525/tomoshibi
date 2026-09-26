@@ -84,6 +84,7 @@ class Game {
     this.escape = false; this.collapse = null; this.pendingFall = false;
     this.markers = []; this.doorways = []; this.mist = null; this.dawnZone = null; this.dawn = null;
     this.dawnDone = false; this.sun = 0;
+    this.poles = [];
     this.guards = []; this.lamps = []; this.fear = 0; this.fearCd = 0; this.nooks = []; this.martaSpot = null; this.npcSpots = [];
     this.darks = (stage.darks || []).map(([x0, y0, x1, y1]) => ({ x0: x0 * TILE, y0: y0 * TILE, x1: (x1 + 1) * TILE, y1: (y1 + 1) * TILE }));
     for (const e of stage.ents) {
@@ -108,6 +109,7 @@ class Game {
         case 'marker': this.markers.push(new Marker(e)); break;
         case 'guard': this.guards.push(new Guard(e)); break;
         case 'lamp': this.lamps.push(new Lamp(e)); break;
+        case 'pole': this.poles.push(new Pole(e)); break;
         case 'nook': this.nooks.push({ x0: e.x - 8, x1: e.x - 8 + (e.w || 1) * TILE, y: e.y }); break;
         case 'marta': this.martaSpot = { x: e.x, y: e.y, done: false }; break;
         case 'npcspot': this.npcSpots.push(e); break;
@@ -120,6 +122,7 @@ class Game {
     for (const b of this.bridges) b.plates = this.plates.filter((p) => p.gateIds.includes(b.id));
     this.world.dyn = [...this.gates, ...this.blocks, ...this.crumbles, ...this.bridges, ...this.rocks, ...this.markers];
     if (this.mist) this.world.dyn.push(this.mist);
+    this.world.dyn.push(...this.poles);
     if (cp) {
       for (const l of this.levers) if (cp.levers.includes(l.id)) { l.on = true; }
       for (const g of this.gates) if (this.levers.some((l) => l.on && l.gateIds.includes(g.id))) { g.locked = true; g.open = 1; }
@@ -143,6 +146,7 @@ class Game {
     for (const el of this.bubbleEls.values()) el.el.remove();
     this.bubbleEls.clear();
     if (C.startHooded && !cp) this.heroine.hooded = true;
+    if (cp && cp.escape && this.martaSpot) this.martaSpot.done = true;     // she has been met already
     if (cp && cp.escape) this.startEscapeCut(true);
   }
 
@@ -954,7 +958,7 @@ class Game {
   // ---- chapter 3: Marta at the sanatorium ---------------------------------------------
   updateMarta() {
     const m = this.martaSpot;
-    if (!m || m.done || this.hero.x < m.x - 40 || Math.abs(this.hero.y - m.y) > 20) return false;
+    if (!m || m.done || this.escape || !this.hero.onGround || this.hero.x < m.x - 40 || this.hero.x > m.x + 40 || Math.abs(this.hero.y - m.y) > 20) return false;
     m.done = true;
     this.state = 'cutscene';
     this.ui.skip.style.display = 'block'; this.ui.hud.style.display = 'none';
@@ -983,6 +987,7 @@ class Game {
     hero.lastSafe = { x: hero.x, y: hero.y };
     this.escape = true;
     this.collapse = new Collapse(e.x - 110, e.y, CHAPTERS[this.chapter].pursuit || 'rubble');
+    this.pathLog = [{ x: e.x - 200, y: e.y, g: true }, { x: hero.x, y: hero.y, g: true }];
     for (const n of [...this.npcs]) this.removeNpc(n.key);
     this.heroine.hooded = false;
     this.state = 'play';
@@ -997,6 +1002,8 @@ class Game {
   // true when this frame ended the play step (caught / reached the exit)
   updateEscape() {
     const hero = this.hero, h = this.heroine, c = this.collapse;
+    const last = this.pathLog[this.pathLog.length - 1];
+    if (hero.x > last.x + 1) this.pathLog.push({ x: hero.x, y: hero.y, g: hero.onGround });
     c.update(this);
     if (hero.state !== 'fallout' && (c.caught(hero) || c.caught(h))) {
       this.fellOut();
@@ -1196,6 +1203,7 @@ class Game {
       ctx.fillStyle = '#4a3a38'; ctx.fillRect(x - 2, y - 44, w + 4, 2);
     }
     for (const L of this.lamps) L.draw(ctx, cx, cy);
+    for (const p of this.poles) p.draw(ctx, cx, cy);
     for (const m of this.markers) m.drawStone(ctx, cx, cy);
     for (const m of this.markers) m.drawShadow(ctx, cx, cy, T);
     for (const s of this.signs) s.draw(ctx, cx, cy);

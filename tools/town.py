@@ -177,6 +177,13 @@ def castle():
         c.poly([(x - 3, top), (x + ww + 3, top), (x + ww / 2, top - 18)], base)
     a = c.down()
     t = rgba(w, h)
+    # a pale moon with a faint halo (drawn first, the castle stands in front)
+    yy, xx = np.mgrid[0:h, 0:w]
+    d = np.hypot(xx - 90, yy - 48)
+    halo = (d < 34) & (d >= 13)
+    t[halo] = col((36, 36, 62))
+    t[d < 13] = col((226, 222, 200)); t[(d < 13) & (xx + yy % 3 > 96)] = col((200, 196, 178))
+    t[(np.hypot(xx - 86, yy - 45) < 3)] = col((196, 192, 172))
     t[a[..., 3] > 128] = col(base[:3])
     r = np.random.default_rng(3)
     for _ in range(50):
@@ -208,6 +215,44 @@ def roofs():
     return t
 
 
+def shop_sign(kind):
+    """A hanging shop sign on an iron bracket: 0 bread, 1 boot, 2 key."""
+    t = rgba(20, 20)
+    t[1, 0:18] = col(IRON[1]); t[0:3, 0] = col(IRON[1]); t[2, 1] = col(IRON[0])
+    t[2:5, 4] = col(IRON[0]); t[2:5, 15] = col(IRON[0])
+    t[5:17, 2:18] = col(WOOD[2]); t[5, 2:18] = col(WOOD[3]); t[16, 2:18] = col(WOOD[0])
+    t[5:17, 2] = col(WOOD[1]); t[5:17, 17] = col(WOOD[0])
+    ink = (40, 28, 24)
+    if kind == 0:                                # a loaf
+        t[9:13, 6:14] = col((150, 100, 50)); t[8, 7:13] = col((180, 130, 70)); t[10, 8] = col(ink); t[10, 11] = col(ink)
+    elif kind == 1:                              # a boot
+        t[7:13, 8:11] = col(ink); t[11:14, 8:15] = col(ink)
+    else:                                        # a key
+        t[8:11, 6:9] = col((200, 170, 90)); t[9, 7] = col(WOOD[2]); t[9, 9:15] = col((200, 170, 90)); t[10:12, 13] = col((200, 170, 90))
+    return outline(t, OUT, grow=False)
+
+
+def flower_box():
+    t = rgba(16, 8)
+    t[4:8, 1:15] = col(WOOD[1]); t[4, 1:15] = col(WOOD[2])
+    r = np.random.default_rng(12)
+    for x in range(2, 14, 2):
+        h = int(r.integers(1, 4))
+        t[4 - h:4, x] = col((50, 80, 60))
+        t[4 - h - 1, x] = col([(170, 110, 140), (190, 170, 110), (140, 150, 190)][x % 3])
+    return t
+
+
+def cat():
+    t = rgba(12, 8)
+    body = (14, 12, 18)
+    t[3:7, 2:9] = col(body); t[2:5, 8:11] = col(body); t[1, 8] = col(body); t[1, 10] = col(body)
+    t[1:4, 1] = col(body); t[0, 0] = col(body)                 # tail up
+    t[7, 3] = col(body); t[7, 7] = col(body)
+    t[3, 9] = col((200, 190, 90))                            # an eye catching the moon
+    return t
+
+
 def all_items():
     items = {}
     for i in range(4):
@@ -223,6 +268,10 @@ def all_items():
     items["chimney"] = chimney()
     items["poster"] = poster()
     items["laundry"] = laundry()
+    for k in range(3):
+        items[f"shopsign{k}"] = shop_sign(k)
+    items["flowerbox"] = flower_box()
+    items["cat"] = cat()
     return items
 
 

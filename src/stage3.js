@@ -49,7 +49,7 @@ function buildStage3() {
   ent('nook', 83, 27, { w: 3 });
   // a lamp, a barrel's shadow and a balcony: the first lure (a page lies up there)
   ent('lamp', 91, 27, { id: 'L1', guard: 'gC' });
-  ent('marker', 94, 27, { id: 'b1', look: 'barrel', h: 24, lamp: 'L1' });
+  ent('marker', 94, 27, { id: 'b1', look: 'barrel', h: 28, lamp: 'L1' });
   fill(96, 24, 99, 24);
   ent('block', 104, 27, { id: 'k2' });
   dec('bwindow', 48, 27); dec('bwindow', 61, 27); dec('bwindow', 74, 25); dec('poster', 79, 25); dec('bwindow', 100, 25);
@@ -58,17 +58,16 @@ function buildStage3() {
   // ===== C: over the rooftops ===================================================
   air(109, 112, 26); rect(noBg, 0, 109, 18, 112, 25);    // a shed against the last house
   air(113, 120, 24);                                 // roof A
-  pit(121, 123, 20);
+  pit(121, 123, 2);
   air(124, 131, 24);                                 // roof B
-  pit(132, 134, 20);
-  air(135, 145, 24);                                 // roof C (with an attic under the chimney)
+  pit(132, 134, 2);
+  air(135, 145, 23);                                 // roof C
   air(146, 151, 22);                                 // roof D
-  indoors(136, 25, 143, 27);                         // the attic
-  carve(138, 24, 138, 24);                           // the chimney hole into it
-  fill(137, 27, 137, 27); fill(138, 26, 138, 27);    // steps back up to the hole
+  // poles strung between the chimneys: only Grey can climb them (a fragment waits on top)
+  ent('pole', 137, 20, { w: 2 }); ent('pole', 139, 18, { w: 2 }); ent('pole', 141, 16, { w: 2 });
   ent('shrine', 110, 25, { id: 's2' });
   ent('ambush', 127, 23, { id: 'a1', x0: 125, x1: 130, waves: [[{ tx: 124, ty: 23, fly: true }, { tx: 131, ty: 23, fly: true }]] });
-  dec('chimney', 116, 24); dec('laundry', 125, 22); dec('chimney', 141, 24); dec('chimney', 148, 22);
+  dec('chimney', 116, 24); dec('laundry', 125, 22); dec('chimney', 141, 23); dec('chimney', 148, 22);
 
   // ===== D: the sewers (dark) ===================================================
   air(152, 155, 26); air(156, 159, 28); street(160, 170, 30);
@@ -86,7 +85,7 @@ function buildStage3() {
   street(233, 236, 30);
   // past the stair, deeper in: stepping stones nobody can see without light, then a dead end
   tunnel(233, 31, 247, 35);
-  water(234, 244); fill(236, 36, 236, 36); fill(239, 36, 239, 36); fill(242, 36, 242, 36);
+  water(234, 244); for (const x of [235, 237, 239, 241, 243]) fill(x, 36, x, 36);
   darks.push([233, 31, 247, 40]);
   dec('chain', 190, 31, { len: 2 });
 
@@ -99,6 +98,7 @@ function buildStage3() {
   fill(241, 26, 242, 26);                             // ledge
   ent('marker', 246, 29, { id: 'st1', look: 'marker', h: 32, lamp: 'L2' });   // a statue
   ent('lamp', 250, 29, { id: 'L2', guard: 'gD' });
+  ent('nook', 242, 29, { w: 3 });
   ent('guard', 258, 29, { id: 'gD', dir: -1, turn: 300 });
   // a watchman on a balcony above the street: he cannot bump into her, but he looks down
   fill(262, 26, 276, 26);
@@ -110,7 +110,7 @@ function buildStage3() {
   ent('gate', 289, 27, { id: 'gP' });
   fill(289, 12, 289, 26);
   ent('lever', 291, 29, { id: 'lvP', gates: ['gP'] });
-  ent('shrine', 244, 29, { id: 's4' });
+  ent('shrine', 235, 29, { id: 's4' });
   dec('bwindow', 254, 27); dec('poster', 266, 27); dec('barrel', 284, 30);
 
   // ===== F: the sanatorium ========================================================
@@ -130,24 +130,29 @@ function buildStage3() {
   ];
   let prev = 22;
   for (const [x0, x1, sf] of run) {
-    if (sf === null) { pit(x0, x1, prev - 6); continue; }
-    if (sf === 'plank') { pit(x0, x1, prev - 6); for (let x = x0; x <= x1; x++) ent('crumble', x, prev - 1); continue; }
+    if (sf === null) { pit(x0, x1, 2); continue; }
+    if (sf === 'plank') { pit(x0, x1, 2); for (let x = x0; x <= x1; x++) ent('crumble', x, prev - 1); continue; }
     air(x0, x1, sf); prev = sf;
   }
-  fill(360, 14, 368, 14);                              // an upper roof: a shortcut? no - a detour for a fragment
   ent('escape', 321, 21, { id: 's6' });
   ent('exit', 406, 19, { dx: 0 });
   dec('chimney', 325, 22); dec('chimney', 352, 20); dec('chimney', 378, 19);
 
+  // ===== small things that make it a lived-in town (no lit windows: the curfew) ====
+  for (const [x, s2, v] of [[48, 26, 0], [62, 26, 1], [76, 24, 2], [89, 24, 0], [250, 26, 1], [271, 26, 2]]) dec('shopsign', x, s2, { v });
+  for (const [x, s2] of [[37, 29], [43, 29], [48, 29], [61, 29], [74, 27], [100, 27], [254, 29]]) dec('flowerbox', x, s2);
+  for (const [x, s2] of [[116, 21], [141, 20], [148, 19], [325, 19], [352, 17], [378, 16]]) dec('smoke', x, s2);
+  dec('cat', 128, 24); dec('cat', 344, 20); dec('cat', 67, 30);
+
   // ===== collectibles ===============================================================
   ent('shard', 2, 30, { id: 'c3f1' });               // A: in the sunken yard
   ent('page', 97, 23, { id: 'c3j1' });               // B: on the balcony (lamp + barrel shadow)
-  ent('shard', 141, 27, { id: 'c3f2' });             // C: in the attic
+  ent('shard', 142, 14, { id: 'c3f2' });             // C: on the highest pole above the roofs
   ent('shard', 239, 33, { id: 'c3f3' });             // D: over the unseen stones
   ent('page', 246, 35, { id: 'c3j2' });              // D: the dead end deep in the sewer
   ent('shard', 239, 22, { id: 'c3f4' });             // E: on top of the clock tower
   ent('page', 303, 23, { id: 'c3j3' });              // F: Marta's diary on the shelf above the landing
-  ent('shard', 364, 12, { id: 'c3f5' });             // G: the upper roof
+  ent('shard', 400, 16, { id: 'c3f5' });             // G: high over the last roof - a jump that costs a moment
 
   return { W, H, solid, noBg, ents, decor, darks, name: '消灯の街' };
 }

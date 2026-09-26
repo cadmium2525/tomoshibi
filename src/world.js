@@ -10,7 +10,9 @@ const THEMES = {
   forest: { front: (r) => 'dirt' + Math.floor(r * 6), top: 'grass', back: (r) => 'eback' + Math.floor(r * 4),
     deep: '#1a1014', shade: 'rgba(14,8,10,0.6)', edges: ['#1a1014', '#8a6448', '#3a2622', '#4a3228'],
     sky: { grad: 'sky2', far: 'hills2', mid: 'trees2', farFill: '#262240', midFill: '#181628' } },
-  town: { front: (r) => 'cob' + Math.floor(r * 4), top: 'ctop', back: (r) => 'wall' + Math.floor(r * 4),
+  // house fronts alternate: brick, then timber and plaster, every few tiles
+  town: { front: (r) => 'cob' + Math.floor(r * 4), top: 'ctop',
+    back: (r, x) => (Math.floor(x / 7) % 3 === 1 ? 'plaster' + (Math.floor(r * 2) * 2 + (x % 7 === 0 ? 0 : 1)) : 'wall' + Math.floor(r * 4)),
     back2: (r) => 'plaster' + Math.floor(r * 4),
     deep: '#0e0c14', shade: 'rgba(8,8,14,0.66)', edges: ['#14121a', '#8a8898', '#3a3844', '#34323e'],
     sky: { grad: 'sky3', far: 'far3', mid: 'mid3', farFill: '#1a1830', midFill: '#121020' } },
@@ -82,7 +84,7 @@ class World {
       const nb = this.noBg[y * W + x];
       if (this.solid[y * W + x] || nb === 1) continue;
       const r = this.hash(x, y);
-      const name = nb === 2 && TH.back2 ? TH.back2(r) : TH.back(r);
+      const name = nb === 2 && TH.back2 ? TH.back2(r) : TH.back(r, x, y);
       drawTile(g, name, x * TILE, y * TILE);
     }
     // soft shadow under ceilings / beside walls on the back wall
@@ -190,6 +192,18 @@ class World {
         case 'fern': drawTile(ctx, 'fern', x, y - 16); break;
         case 'flower': drawTile(ctx, 'flower' + (d.v || 0), x + 4, y - 8); break;
         case 'stump': drawTile(ctx, 'stump', x - 8, y - 16); break;
+        // town
+        case 'shopsign': drawTile(ctx, 'shopsign' + (d.v || 0), x, y); break;
+        case 'flowerbox': drawTile(ctx, 'flowerbox', x, y); break;
+        case 'cat': if (Math.floor(t / 400 + d.x) % 5) drawTile(ctx, 'cat', x + 2, y - 8); break;     // now and then it wanders off
+        case 'smoke':                             // someone keeps a stove going behind the shutters
+          for (let i = 0; i < 5; i++) {
+            const k = ((t * 0.4 + i * 26 + d.x) % 130) / 130;
+            const sx = x + 8 + Math.sin(k * 5 + i) * 3 + k * 10, sy = y - k * 60;
+            ctx.fillStyle = `rgba(120,116,134,${0.35 * (1 - k)})`;
+            ctx.fillRect(Math.round(sx - 2 - k * 3), Math.round(sy), Math.round(4 + k * 6), Math.round(3 + k * 3));
+          }
+          break;
         case 'candle': {
           drawTile(ctx, 'candle', x, y);
           const f = Math.floor(t / 7 + d.x) % 3;

@@ -118,3 +118,4 @@ cd tools && python build_assets.py
 
 - `python tools/devserver.py 8932` → `http://localhost:8932/?debug` で開くと `T.run(frames, keys)` などのデバッグ関数が使える
 - `tools/autoplay.js` を読み込んで `autoplay()` を実行すると、第1章をスタートからクリアまで自動でプレイして検証する（第2章は `tools/autoplay2.js` の `autoplay2()`、第3章は `tools/autoplay3.js` の `autoplay3()`）
+- `tools/collect.js` を読み込んで `collectTest()` を実行すると、全章の収集物（影絵の欠片・灯守りの手記）を1つずつ実際に取りに行き、取れるかを確かめる。収集物を置いたり地形を変えたりしたら必ず実行する

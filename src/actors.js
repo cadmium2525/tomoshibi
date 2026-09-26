@@ -909,6 +909,12 @@ class Guard extends Body {
       }
       case 'snuff':
         this.vx = 0;
+        if (this.t === 1) game.say(this, '……灯りは 禁じられている。', 'hero', 120);
+        this.lamp.dying = this.t / 300;           // he lifts his pole and smothers it little by little
+        if (this.t === 300) {
+          const L = this.lamp; L.dying = 0;
+          for (let i = 0; i < 12; i++) game.particles.add({ x: L.x + rand(-4, 4), y: L.y - 44, vx: rand(-0.3, 0.3), vy: rand(-0.9, -0.3), life: rand(30, 50), col: i % 2 ? '#8a8490' : '#5a5460', size: 2 });
+        }
         if (this.t === 300) { this.lamp.lit = false; this.lamp.by = null; this.lamp = null; Sfx.play('plateoff'); this.setState('return'); }
         if (seen) this.setState('alert');
         break;
