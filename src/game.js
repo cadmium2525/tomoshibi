@@ -84,7 +84,7 @@ class Game {
     this.escape = false; this.collapse = null; this.pendingFall = false;
     this.markers = []; this.doorways = []; this.mist = null; this.dawnZone = null; this.dawn = null;
     this.dawnDone = false; this.sun = 0;
-    this.poles = [];
+    this.poles = []; this.sanctuaries = [];
     this.guards = []; this.lamps = []; this.fear = 0; this.fearCd = 0; this.nooks = []; this.martaSpot = null; this.npcSpots = [];
     this.darks = (stage.darks || []).map(([x0, y0, x1, y1]) => ({ x0: x0 * TILE, y0: y0 * TILE, x1: (x1 + 1) * TILE, y1: (y1 + 1) * TILE }));
     for (const e of stage.ents) {
@@ -110,6 +110,7 @@ class Game {
         case 'guard': this.guards.push(new Guard(e)); break;
         case 'lamp': this.lamps.push(new Lamp(e)); break;
         case 'pole': this.poles.push(new Pole(e)); break;
+        case 'sanctuary': this.sanctuaries.push({ x0: e.x - 8, x1: (e.x1 + 1) * TILE }); break;
         case 'nook': this.nooks.push({ x0: e.x - 8, x1: e.x - 8 + (e.w || 1) * TILE, y: e.y }); break;
         case 'marta': this.martaSpot = { x: e.x, y: e.y, done: false }; break;
         case 'npcspot': this.npcSpots.push(e); break;
@@ -630,6 +631,7 @@ class Game {
     return true;
   }
 
+  inSanctuary(x) { return this.sanctuaries.some((s) => x >= s.x0 && x < s.x1); }
   inNook(h) { return this.nooks.some((n) => h.x >= n.x0 && h.x <= n.x1 && Math.abs(h.y - n.y) < 4); }
 
   // hidden under the coat she is alone in the dark again: her fear draws the shadows
@@ -960,6 +962,7 @@ class Game {
     const m = this.martaSpot;
     if (!m || m.done || this.escape || !this.hero.onGround || this.hero.x < m.x - 40 || this.hero.x > m.x + 40 || Math.abs(this.hero.y - m.y) > 20) return false;
     m.done = true;
+    for (const gd of this.guards) if (['alert', 'chase', 'lost'].includes(gd.state)) { gd.setState('return'); gd.vx = 0; }
     this.state = 'cutscene';
     this.ui.skip.style.display = 'block'; this.ui.hud.style.display = 'none';
     const spot = this.npcSpots.find((e) => e.name === 'marta');

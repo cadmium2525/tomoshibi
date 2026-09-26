@@ -122,6 +122,7 @@ function buildStage3() {
   // a few steps up to a landing by the window (Marta's diary lies up on the shelf)
   fill(300, 29, 300, 29); fill(301, 28, 301, 29); fill(302, 27, 304, 29); fill(305, 28, 305, 29); fill(306, 29, 306, 29);
   ent('shrine', 298, 29, { id: 's5' });
+  ent('sanctuary', 295, 29, { x1: 318 });            // the watch does not follow anyone in here
   ent('marta', 313, 29);
   ent('npcspot', 316, 29, { name: 'marta' });
 

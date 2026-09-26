@@ -825,7 +825,7 @@ class Guard extends Body {
   // does he see her right now?
   sees(game) {
     const h = game.heroine, w = game.world;
-    if (h.state === 'carried') return false;
+    if (h.state === 'carried' || game.inSanctuary(h.x)) return false;
     const e = this.eye(), dx = h.x - this.x, dy = (h.y - 18) - e.y;
     if (h.hooded) {
       // under the coat: only noticed walking right into his face (never in a nook)
@@ -848,6 +848,8 @@ class Guard extends Body {
     const dx = tx - this.x;
     if (Math.abs(dx) < 2) { this.vx = 0; return true; }
     this.facing = sign(dx);
+    // never set foot in a sanctuary (the sanatorium)
+    if (game.inSanctuary(this.x + this.facing * (this.hw + 4))) { this.vx = 0; return true; }
     const w = game.world, fx = this.x + this.facing * (this.hw + 2);
     // guards keep to the ground: no leaps into pits, one-tile steps are fine
     if (!w.pointSolid(fx, this.y + 2) && !w.pointSolid(fx, this.y + 18)) { this.vx = 0; return true; }
@@ -883,6 +885,7 @@ class Guard extends Body {
         if (this.t >= 40) { if (seen || this.t < 60) this.setState('chase'); else this.setState('lost'); }
         break;
       case 'chase':
+        if (game.inSanctuary(h.x)) { this.setState('lost'); game.say(this, '……療養院か。 ちっ。', 'hero', 90); break; }
         this.unseen = seen ? 0 : this.unseen + 1;
         this.walkTo(game, h.x, 1.65);
         if (Math.abs(h.x - this.x) < 12 && Math.abs(h.y - this.y) < 26 && h.state !== 'carried') { game.gameOver('guard'); return; }
