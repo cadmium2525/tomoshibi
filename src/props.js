@@ -382,13 +382,21 @@ class Collapse {
     const x = Math.round(this.x - cx);
     if (this.style === 'guards') {
       // three guards running over the roofs along the very path Grey took (leaping where he leapt)
-      const P = game.pathLog || [];
+      // Where there is no footing *now* (a gap, or planks that have since fallen) they leap:
+      // an arc from the last spot with ground under it to the next one.
+      const P = game.pathLog || [], w = game.world;
+      const firm = (p) => w.pointSolid(p.x, p.y + 2);
       for (let i = 0; i < 3; i++) {
         const gx = this.x - 6 - i * 22;
         let k = P.length - 1;
         while (k > 0 && P[k].x > gx) k--;
-        const a = P[k], b = P[Math.min(P.length - 1, k + 1)], f = b.x > a.x ? clamp((gx - a.x) / (b.x - a.x), 0, 1) : 0;
-        const gy = lerp(a.y, b.y, f), air = !a.g || !b.g;
+        let a = k, b = Math.min(P.length - 1, k + 1);
+        while (a > 0 && !firm(P[a])) a--;
+        while (b < P.length - 1 && !firm(P[b])) b++;
+        const A = P[a], B = P[b], span = B.x - A.x;
+        const f = span > 0 ? clamp((gx - A.x) / span, 0, 1) : 0;
+        const air = b - a > 1 && span > 18;
+        const gy = lerp(A.y, B.y, f) - (air ? Math.min(34, span * 0.22) * 4 * f * (1 - f) : 0);
         drawSprite(ctx, 'guard', air ? 'run2' : 'run' + (Math.floor(this.t / 5 + i * 2) % 6), gx - cx, Math.round(gy) - cy, false);
       }
       return;
