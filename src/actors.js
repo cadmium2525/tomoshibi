@@ -405,8 +405,10 @@ class Heroine extends Body {
         return;
       }
     }
-    if (this.y > w.ph + 48) {           // safety: never lose her in a pit
-      this.x = hero.lastSafe.x; this.y = hero.lastSafe.y; this.vx = this.vy = 0; this.setState('normal');
+    if (this.y > w.ph + 48) {
+      // she fell into the abyss (e.g. the planks gave way under her): that is losing her
+      if (game.state === 'play') game.gameOver('fall');
+      else { this.x = hero.lastSafe.x; this.y = hero.lastSafe.y; this.vx = this.vy = 0; this.setState('normal'); }
     }
   }
 

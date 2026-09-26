@@ -5,7 +5,7 @@
 // first solid tile under a floor (feet y = surface * 16).
 // ---------------------------------------------------------------------------
 function buildStage1() {
-  const W = 424, H = 48;
+  const W = 438, H = 48;
   const solid = new Uint8Array(W * H).fill(1);
   const noBg = new Uint8Array(W * H);          // 1 = no back wall (parallax shows)
   const ents = [];
@@ -65,7 +65,7 @@ function buildStage1() {
   ent('shard', 40, 22, { id: 'f2' });                 // jump from the lowest ledge of the shaft
   ent('shard', 80, 29, { id: 'f3' });                 // above the landing between chasms 2 and 3
   ent('shard', 175, 13, { id: 'f4' });                // above the highest beam of the fragile bridge
-  ent('shard', 350, 16, { id: 'f5' });                // a jump that costs time while the collapse chases
+  ent('shard', 364, 16, { id: 'f5' });                // a jump that costs time while the collapse chases
   ent('page', 41, 33, { id: 'j1' });                  // corner at the bottom of the shaft
   ent('page', 160, 21, { id: 'j2' });                 // far end of the room of the stone
   ent('page', 233, 17, { id: 'j3' });                 // shelf at the back of the great hall
@@ -175,12 +175,12 @@ function buildStage1() {
   // Beyond the door a passage climbs to the surface. The cathedral caves in
   // behind them; Grey runs holding her hand. [x0, x1, surface | null = pit]
   const run = [
-    [242, 252, 30], [253, 255, null], [256, 262, 30], [263, 266, 29], [267, 270, 28],
-    [271, 274, null], [275, 282, 27], [283, 292, 25], [293, 295, null], [296, 310, 24],
-    [311, 318, 'plank'], [319, 324, 24], [325, 328, 22], [329, 331, null], [332, 338, 22],
-    [339, 342, 20], [343, 346, null], [347, 354, 20], [355, 358, 21], [359, 366, 19],
-    [367, 370, null], [371, 378, 18], [379, 382, 16], [383, 392, 16], [393, 396, null],
-    [397, 404, 15], [405, 420, 14],
+    [256, 266, 30], [267, 269, null], [270, 276, 30], [277, 280, 29], [281, 284, 28],
+    [285, 288, null], [289, 296, 27], [297, 306, 25], [307, 309, null], [310, 324, 24],
+    [325, 332, 'plank'], [333, 338, 24], [339, 342, 22], [343, 345, null], [346, 352, 22],
+    [353, 356, 20], [357, 360, null], [361, 368, 20], [369, 372, 21], [373, 380, 19],
+    [381, 384, null], [385, 392, 18], [393, 396, 16], [397, 406, 16], [407, 410, null],
+    [411, 418, 15], [419, 434, 14],
   ];
   let prev = 30;
   for (const [x0, x1, sf] of run) {
@@ -193,12 +193,12 @@ function buildStage1() {
     carve(x0, sf - 6, x1, sf - 1);
     prev = sf;
   }
-  ent('escape', 244, 29, { id: 's6' });
-  for (const [tx, ty] of [[259, 29], [279, 26], [289, 24], [322, 23], [335, 21], [351, 19], [375, 17], [387, 15]]) ent('rock', tx, ty);
-  ent('exit', 416, 13, { dx: 0 });
-  dec('torch', 247, 25); dec('torch', 260, 25); dec('torch', 278, 22); dec('torch', 299, 19); dec('torch', 321, 19);
-  dec('torch', 336, 17); dec('torch', 352, 15); dec('torch', 374, 13); dec('torch', 390, 11); dec('torch', 410, 9);
-  dec('chain', 268, 22, { len: 3 }); dec('chain', 305, 18, { len: 3 }); dec('chain', 362, 13, { len: 3 });
+  ent('escape', 258, 29, { id: 's6' });
+  for (const [tx, ty] of [[273, 29], [293, 26], [303, 24], [336, 23], [349, 21], [365, 19], [389, 17], [401, 15]]) ent('rock', tx, ty);
+  ent('exit', 430, 13, { dx: 0 });
+  dec('torch', 261, 25); dec('torch', 274, 25); dec('torch', 292, 22); dec('torch', 313, 19); dec('torch', 335, 19);
+  dec('torch', 350, 17); dec('torch', 366, 15); dec('torch', 388, 13); dec('torch', 404, 11); dec('torch', 424, 9);
+  dec('chain', 282, 22, { len: 3 }); dec('chain', 319, 18, { len: 3 }); dec('chain', 376, 13, { len: 3 });
 
   return { W, H, solid, noBg, ents, decor, name: '忘れられた地下聖堂' };
 }

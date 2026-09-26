@@ -74,6 +74,7 @@ class Game {
     this.world = new World(stage);
     this.t = 0; this.shake = 0; this.hitstop = 0; this.dangerT = 0; this.spawnCd = 300;
     this.flags = {}; this.msgT = 0; this.msgHtml = ''; this.toastT = 0; this.fade = 0;
+    this.ui.toast.style.display = 'none';
     this.particles = new Particles();
     this.gates = []; this.plates = []; this.levers = []; this.blocks = []; this.shrines = [];
     this.signs = []; this.ambushes = []; this.door = null; this.shadows = []; this.portals = []; this.npcs = [];
@@ -122,7 +123,7 @@ class Game {
     this.updateCamera(true);
     for (const el of this.bubbleEls.values()) el.el.remove();
     this.bubbleEls.clear();
-    if (cp && cp.escape) this.beginEscape(false);
+    if (cp && cp.escape) this.startEscapeCut(true);
   }
 
   saveCheckpoint(shrine) {
@@ -244,7 +245,12 @@ class Game {
         return;
       case 'gameover':
         this.stGo++;
-        if (this.stGo === 70) this.showCenter(`<h1 style="color:#d8c8ff">ルミナは 闇に連れ去られた…</h1><h2>あなたは 彼女の手を 離してしまった</h2><div class="blink">${Touch.enabled ? 'タップで' : 'Z：'}最後の灯籠から やり直す</div>`, true);
+        if (this.stGo === 70) {
+          const [t1, t2] = this.goReason === 'fall'
+            ? ['ルミナは 奈落へ 落ちてしまった…', 'あなたは 彼女を 守れなかった']
+            : ['ルミナは 闇に連れ去られた…', 'あなたは 彼女の手を 離してしまった'];
+          this.showCenter(`<h1 style="color:#d8c8ff">${t1}</h1><h2>${t2}</h2><div class="blink">${Touch.enabled ? 'タップで' : 'Z：'}最後の灯籠から やり直す</div>`, true);
+        }
         if (this.stGo > 70 && (Input.pressed('jump') || Input.pressed('start') || Input.pressed('retry'))) this.retry();
         this.particles.update();
         return;
@@ -315,6 +321,7 @@ class Game {
     this.stats = Object.assign({ time: 0, grabs: 0, kills: 0, retries: 0 }, d.cleared.includes(1) ? {} : d.stats);
     this.collected = new Set(d.collected || []);          // what was found stays found
     this.load(this.checkpoint);
+    if (this.state === 'cutscene') return;
     this.state = 'play';
     this.ui.hud.style.display = 'flex';
     this.showChapter('第1章', '忘れられた地下聖堂');
@@ -772,11 +779,18 @@ class Game {
       }
     } else if (d.open >= 1 && hNear && heroNear && !d.passed) {
       d.passed = true;
-      this.state = 'cutscene';
-      this.ui.skip.style.display = 'block';
-      this.cutSkip = () => { this.cut = null; this.hideTalk(); this.beginEscape(true); };
-      this.cut = new Cutscene(this, collapseScript(), () => this.beginEscape(true));
+      this.startEscapeCut(false);
     }
+  }
+
+  // the collapse cutscene: first time through the door, or again after being caught
+  startEscapeCut(retry) {
+    const first = !retry;
+    this.state = 'cutscene';
+    this.ui.skip.style.display = 'block';
+    this.ui.hud.style.display = 'none';
+    this.cutSkip = () => { this.cut = null; this.hideTalk(); this.beginEscape(first); };
+    this.cut = new Cutscene(this, collapseScript(retry), () => this.beginEscape(first));
   }
 
   // ---- the collapse: run for the exit hand in hand ---------------------------------
@@ -813,7 +827,6 @@ class Game {
     c.update(this);
     if (hero.state !== 'fallout' && (c.caught(hero) || c.caught(h))) {
       this.fellOut();
-      this.say(this.heroine, 'きゃあっ…！', 'cry', 50);
       return true;
     }
     const d = this.exitDoor;
@@ -859,9 +872,9 @@ class Game {
     }
   }
 
-  gameOver() {
+  gameOver(reason = 'taken') {
     if (this.state !== 'play') return;
-    this.state = 'gameover'; this.stGo = 0;
+    this.state = 'gameover'; this.stGo = 0; this.goReason = reason;
     Sfx.stopBgm(); Sfx.play('over');
     this.ui.msg.style.display = 'none';
   }
@@ -870,6 +883,7 @@ class Game {
   fellOut() {
     this.stats.retries++;
     this.load(this.progressSnapshot());
+    if (this.state === 'cutscene') return;           // the escape starts over with its cutscene
     this.state = 'play';
     this.black = 1;
     this.say(this.heroine, 'グレイさん…！', 'her', 60);
@@ -878,6 +892,7 @@ class Game {
   retry() {
     this.stats.retries++;
     this.load(this.progressSnapshot());
+    if (this.state === 'cutscene') { this.hideCenter(); Sfx.startBgm(); return; }
     this.state = 'play'; this.hideCenter();
     Sfx.startBgm();
     this.say(this.heroine, 'グレイさん…！', 'her', 60);
