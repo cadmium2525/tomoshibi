@@ -39,6 +39,7 @@ class Game {
     this.bubbleEls = new Map();
     this.stats = { time: 0, grabs: 0, kills: 0, retries: 0 };
     this.checkpoint = null;
+    this.chapter = 1; useChapter(1);
     this.collected = new Set();         // ids of shards / pages found (kept across retries)
     this.state = 'title'; this.st = 0; this.titleSel = 0;
     this.load(null);
@@ -70,8 +71,9 @@ class Game {
 
   // ---- setup ---------------------------------------------------------------
   load(cp) {
-    const stage = buildStage1();
-    this.world = new World(stage);
+    const C = CHAPTERS[this.chapter];
+    const stage = C.build();
+    this.world = new World(stage, C.theme);
     this.t = 0; this.shake = 0; this.hitstop = 0; this.dangerT = 0; this.spawnCd = 300;
     this.flags = {}; this.msgT = 0; this.msgHtml = ''; this.toastT = 0; this.fade = 0;
     this.ui.toast.style.display = 'none';
@@ -117,7 +119,8 @@ class Game {
       this.flags.plateHint = true;
     }
     this.black = 0; this.wallShadow = null;
-    this.afterPrologue();
+    if (C.after) C.after(this);
+    this.startPos = { hx: this.hero.x, hy: this.hero.y, yx: this.heroine.x, yy: this.heroine.y };
     this.hero.checkGround(this.world); this.heroine.checkGround(this.world);
     this.cam = { x: 0, y: 0, lx: 0 };
     this.updateCamera(true);
@@ -134,7 +137,7 @@ class Game {
       ambush: this.ambushes.filter((a) => a.done).map((a) => a.id),
       blocks: Object.fromEntries(this.blocks.map((b) => [b.id, { x: b.x, y: b.y }])),
     };
-    Save.write({ chapter: 1, cp: this.checkpoint, stats: this.stats, collected: [...this.collected] });
+    Save.write({ chapter: this.chapter, cp: this.checkpoint, fresh: false, stats: this.stats, collected: [...this.collected] });
   }
 
   // where to go back to after a fall / being taken: the last lantern, but the
@@ -259,6 +262,7 @@ class Game {
         return;
       case 'clear':
         if (this.st > 60 && (Input.pressed('jump') || Input.pressed('start'))) {
+          if (CHAPTERS[this.chapter + 1]) { this.startChapter(this.chapter + 1); return; }
           this.checkpoint = null; this.stats = { time: 0, grabs: 0, kills: 0, retries: 0 };
           this.load(null); this.state = 'title'; this.showTitle(); this.ui.hud.style.display = 'none';
         }
@@ -307,8 +311,45 @@ class Game {
     this.hideCenter();
     this.checkpoint = null; this.stats = { time: 0, grabs: 0, kills: 0, retries: 0 };
     this.collected = new Set();
+    this.chapter = 1; useChapter(1);
     this.load(null);
     this.startPrologue();
+  }
+
+  // begin chapter n (after clearing the one before, or continuing before its intro was seen)
+  startChapter(n) {
+    Sfx.unlock(); Sfx.startBgm();
+    this.hideCenter();
+    this.chapter = n;
+    const C = useChapter(n);
+    this.checkpoint = null; this.stats = { time: 0, grabs: 0, kills: 0, retries: 0 };
+    this.load(null);
+    Save.write({ chapter: n, cp: null, fresh: true, stats: this.stats, collected: [...this.collected] });
+    if (!C.intro) { this.finishIntro(); return; }
+    this.state = 'cutscene';
+    this.ui.hud.style.display = 'none';
+    this.ui.skip.style.display = 'block';
+    this.cutSkip = () => this.finishIntro();
+    this.cut = new Cutscene(this, C.intro(), () => this.finishIntro());
+  }
+
+  finishIntro() {
+    this.cut = null;
+    const hero = this.hero, h = this.heroine, p = this.startPos;
+    hero.setState('normal'); hero.pose = null; hero.kinematic = false; hero.front = false;
+    h.setState('normal'); h.pose = null; h.mode = 'follow';
+    hero.x = p.hx; hero.y = p.hy; h.x = p.yx; h.y = p.yy; hero.facing = h.facing = 1;
+    hero.vx = hero.vy = h.vx = h.vy = 0;
+    hero.checkGround(this.world); h.checkGround(this.world);
+    hero.lastSafe = { x: hero.x, y: hero.y };
+    for (const n of [...this.npcs]) this.removeNpc(n.key);
+    this.black = 0; this.shake = 0; this.fade = 0;
+    this.hideTalk(); this.hideCenter();
+    this.ui.skip.style.display = 'none';
+    this.ui.hud.style.display = 'flex';
+    this.updateCamera(true);
+    this.state = 'play';
+    Save.write({ chapter: this.chapter, cp: null, fresh: false, stats: this.stats, collected: [...this.collected] });
   }
 
   continueGame() {
@@ -316,15 +357,20 @@ class Game {
     if (!d) { this.startNew(); return; }
     Sfx.unlock(); Sfx.startBgm();
     this.hideCenter();
-    // a cleared chapter starts over from its beginning (chapter 2 is not built yet)
-    this.checkpoint = d.cleared.includes(1) ? null : d.cp;
-    this.stats = Object.assign({ time: 0, grabs: 0, kills: 0, retries: 0 }, d.cleared.includes(1) ? {} : d.stats);
     this.collected = new Set(d.collected || []);          // what was found stays found
+    const n = CHAPTERS[d.chapter] ? d.chapter : 1;
+    this.chapter = n;
+    const C = useChapter(n);
+    if (d.fresh && !d.cleared.includes(n)) { this.startChapter(n); return; }
+    // the last chapter there is, already cleared: play it again from its beginning
+    const replay = d.cleared.includes(n);
+    this.checkpoint = replay ? null : d.cp;
+    this.stats = Object.assign({ time: 0, grabs: 0, kills: 0, retries: 0 }, replay ? {} : d.stats);
     this.load(this.checkpoint);
     if (this.state === 'cutscene') return;
     this.state = 'play';
     this.ui.hud.style.display = 'flex';
-    this.showChapter('第1章', '忘れられた地下聖堂');
+    this.showChapter(`第${n}章`, C.title);
   }
 
   // ---- prologue / cutscenes -----------------------------------------------------
@@ -334,16 +380,6 @@ class Game {
     this.ui.hud.style.display = 'none';
     this.ui.skip.style.display = 'block';
     this.cut = new Cutscene(this, prologueScript(), () => this.finishPrologue());
-  }
-
-  // everything as it is after the prologue (also used when retrying)
-  afterPrologue() {
-    const g0 = this.gates.find((g) => g.id === 'g0');
-    if (g0) { g0.locked = true; g0.open = 1; }
-    for (const d of this.world.decor) {
-      if (d.type === 'rope') { d.fallen = true; d.fallT = 99; }
-      if (d.type === 'rubble') d.shown = true;
-    }
   }
 
   setupPrologue() {
@@ -365,7 +401,7 @@ class Game {
   finishPrologue() {
     if (this.state !== 'cutscene') return;
     this.cut = null;
-    this.afterPrologue();
+    CHAPTERS[1].after(this);
     const hero = this.hero, h = this.heroine;
     hero.setState('normal'); hero.pose = null; hero.kinematic = false; hero.x = 9.7 * TILE; hero.y = 16 * TILE; hero.facing = 1;
     h.setState('normal'); h.pose = null; h.x = 8.1 * TILE; h.y = 16 * TILE; h.facing = 1; h.mode = 'follow';
@@ -378,7 +414,7 @@ class Game {
     this.ui.skip.style.display = 'none';
     this.ui.hud.style.display = 'flex';
     this.state = 'play';
-    Save.write({ chapter: 1, cp: null, cleared: [], stats: this.stats, collected: [...this.collected] });
+    Save.write({ chapter: 1, cp: null, fresh: false, cleared: [], stats: this.stats, collected: [...this.collected] });
   }
 
   updateCutscene() {
@@ -720,7 +756,7 @@ class Game {
     const hero = this.hero, h = this.heroine;
     if (this.escape) { this.dangerT = 0; return; }
     const d = Math.hypot(h.x - hero.x, (h.y - hero.y) * 1.2);
-    const safe = h.x < 46 * TILE && h.y < 17 * TILE;          // tutorial corridor
+    const C = CHAPTERS[this.chapter], safe = C.safe ? C.safe(h) : false;
     const exposed = ['normal', 'down', 'getup'].includes(h.state);
     if (d > 176 && exposed && !safe && this.state === 'play') this.dangerT++;
     else this.dangerT = Math.max(0, this.dangerT - 3);
@@ -858,17 +894,20 @@ class Game {
     if (this.et % 3 === 0) this.particles.add({ x: d.x + rand(-20, 20), y: d.y - rand(0, 40), vy: -0.5, life: 50, col: '#fff6d0' });
     if (this.et === 160) {
       this.state = 'clear'; this.st = 0;
-      Save.write({ chapter: 1, cp: null, cleared: [1], stats: this.stats, collected: [...this.collected] });
+      const C = CHAPTERS[this.chapter], next = CHAPTERS[this.chapter + 1];
+      const prev = Save.read(), cleared = [...new Set([...(prev ? prev.cleared : []), this.chapter])];
+      if (next) Save.write({ chapter: next.num, cp: null, fresh: true, cleared, stats: this.stats, collected: [...this.collected] });
+      else Save.write({ chapter: this.chapter, cp: null, fresh: false, cleared, stats: this.stats, collected: [...this.collected] });
       this.ui.hud.style.display = 'none'; this.ui.msg.style.display = 'none';
       for (const b of this.bubbleEls.values()) b.t = 0;
       const s = this.stats;
       const sec = Math.floor(s.time / 60);
-      this.showCenter(`<h1>第1章 クリア</h1><h2>忘れられた地下聖堂</h2>
-        <div class="quote">「これが……そと？」<br>「ああ。――夜明けだ。」</div>
+      this.showCenter(`<h1>第${C.num}章 クリア</h1><h2>${C.title}</h2>
+        <div class="quote">${C.clearQuote || ''}</div>
         <div class="keys"><b>クリアタイム</b>${Math.floor(sec / 60)}分${String(sec % 60).padStart(2, '0')}秒<br>
         <b>さらわれた回数</b>${s.grabs} 回<br><b>光へ還した影</b>${s.kills} 体<br><b>やり直し</b>${s.retries} 回<br>${this.foundHtml()}</div>
-        <div style="margin-top:1em;font-size:0.8em">第2章「薄明の森」へ つづく</div>
-        <div class="blink" style="margin-top:1em">${Touch.enabled ? 'タップで' : 'Z：'}タイトルへ</div>`, false, true);
+        <div style="margin-top:1em;font-size:0.8em">${next ? `第${next.num}章「${next.title}」へ` : 'つづく'}</div>
+        <div class="blink" style="margin-top:1em">${Touch.enabled ? 'タップで' : 'Z：'}${next ? 'つぎの章へ' : 'タイトルへ'}</div>`, false, true);
     }
   }
 
@@ -975,16 +1014,18 @@ class Game {
       ? `<div class="menu title-menu"><button data-cmd="continue"${sel(0)}>つづきから</button><button data-cmd="newgame"${sel(1)}>はじめから</button></div>
          <div class="note">${this.saveLabel(this.titleSave)}</div>`
       : `<div class="blink">${Touch.enabled ? 'タップでスタート' : 'PRESS Z / ENTER'}</div>`;
-    this.showCenter(`<h1>灯のルミナ</h1><h2>第1章 ─ 忘れられた地下聖堂</h2>
+    const tc = CHAPTERS[this.titleSave && CHAPTERS[this.titleSave.chapter] ? this.titleSave.chapter : 1];
+    this.showCenter(`<h1>灯のルミナ</h1><h2>第${tc.num}章 ─ ${tc.title}</h2>
       <div class="press">${press}
       ${document.body.classList.contains('portrait') ? '<div class="note">📱 横向きにすると 画面が大きくなります</div>' : ''}</div>`,
       false, false, 'title');
     this.ui.titlebg.style.display = 'block';
   }
   saveLabel(d) {
-    if (d.cleared.includes(1)) return '第1章 クリア済み';
+    const c = CHAPTERS[d.chapter] ? d.chapter : 1;
+    if (d.cleared.includes(c)) return `第${c}章 クリア済み`;
     const n = d.cp ? d.cp.shrines.length : 0;
-    return `第1章 ─ ${n ? `灯した灯籠 ${n}` : '章のはじめ'}`;
+    return `第${c}章 ─ ${n && !d.fresh ? `灯した灯籠 ${n}` : '章のはじめ'}`;
   }
   showCenter(html, dark = false, light = false, cls = '') {
     this.ui.titlebg.style.display = 'none';

@@ -3,7 +3,8 @@
 // World: tile collision, dynamic solids, pre-rendered tile layers
 // ---------------------------------------------------------------------------
 class World {
-  constructor(stage) {
+  constructor(stage, theme = 'cathedral') {
+    this.theme = theme;
     this.W = stage.W; this.H = stage.H;
     this.solid = stage.solid; this.noBg = stage.noBg;
     this.pw = this.W * TILE; this.ph = this.H * TILE;

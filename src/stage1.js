@@ -203,10 +203,8 @@ function buildStage1() {
   return { W, H, solid, noBg, ents, decor, name: '忘れられた地下聖堂' };
 }
 
-const N = (who) => `<span class="name">${who}：</span>`;
-
 // memories held by the shadow children (shown when a fragment is found)
-const SHARDS = {
+const CH1_SHARDS = {
   f1: 'ちいさな てが、かべに うさぎを つくった。 ぼくは うさぎに なった。',
   f2: 'ろうそくが ゆれると、ぼくも ゆれた。 あのこは わらった。',
   f3: 'あのこが なくと、ぼくは おおきく なった。 だきしめたかった。',
@@ -214,7 +212,7 @@ const SHARDS = {
   f5: '「きょうも ふたりきり だね」 ……うん。 ずっと いっしょ。',
 };
 // pages of an old lamplighter's notebook
-const PAGES = {
+const CH1_PAGES = {
   j1: { title: '灯守りの手記 その一', body: `
     <p>灯をともす者は、その灯が落とす影からも 目をそらしてはならない。</p>
     <p>光あるところ、影は必ず生まれる。 影を嫌う者は、いずれ光までも嫌うようになる。</p>
@@ -228,7 +226,7 @@ const PAGES = {
     <p>影をやわらげるのは 闇ではなく、もうひとつの光だ。</p>
     <p>……この言葉を、いつか 誰かが 思い出してくれるとよいのだが。</p>` },
 };
-const TEXT = {
+const CH1_TEXT = {
   hint_move: N('ヒント') + '{move} で移動、{dash}でダッシュ、{jump} でジャンプ。',
   hint_follow: N('ヒント') + 'ルミナは あなたの後をついてくる。1段の段差や 小さな溝なら 自分で越えられる。',
   sign_wait: N('石碑') + '「灯の巫女 此の石に立つとき 門は開かれん」<br>' + N('ヒント') +
@@ -244,16 +242,25 @@ const TEXT = {
     '2段の段差は ルミナには登れない。上から {down} で 引き上げてあげよう。',
   sign_block: N('石碑') + '「二つの石 一つの門」<br>' + N('ヒント') +
     '2つの石板は 同じ門につながっている。重たい石でも 石板は沈むだろうか…？<br>石の前で {up} で持ち上げ、もう一度 {up} で下ろす。歩いて押すこともできる。',
-  plate_hero: N('グレイ') + '…びくともしない。この石板は ルミナにしか応えないようだ。',
-  door_sealed: N('グレイ') + '影の気配が 扉を封じている…！',
-  door_open: N('グレイ') + '……この扉は、あの子の光にしか 応えないのか。',
-  hint_danger: N('グレイ') + 'しまった、ルミナから離れすぎた…！ 心細さに 彼女の光が揺らいでいる。急いで戻らねば！',
-  hint_stuck: N('ヒント') + '行き詰まったら ポーズ（{pause}）から「最後の灯籠から やり直す」を選べる。',
   sign_bridge: N('石碑') + '「朽ちし橋 重き者を拒み 軽き光を渡す」<br>' + N('ヒント') +
     '古い橋板は グレイが乗ると 崩れてしまう。ルミナは軽いので 渡れる。グレイは 上の梁を跳んで進もう。',
   sign_light: N('石碑') + '「巫女の立つ間 光は橋となる」<br>' + N('ヒント') +
     'ルミナが石板に乗っている間だけ、光の橋が架かる。向こう岸にも 石板があるようだ…。',
-  hint_escape: N('ヒント') + '崩落に 追いつかれる前に 出口へ！ {dash}で走り、{jump}で跳べ。ルミナは 手をつないで ついてくる。',
-  bridge_crumble: N('グレイ') + 'くっ…！ わたしの重さでは 橋板が もたないか。',
-  hint_grab: N('グレイ') + 'ルミナ！ 渦に沈められる前に、{attack} で灯竿を振れ！',
+};
+
+CHAPTERS[1] = {
+  num: 1, title: '忘れられた地下聖堂', theme: 'cathedral', build: buildStage1,
+  text: CH1_TEXT, shards: CH1_SHARDS, pages: CH1_PAGES,
+  clearQuote: '「これが……そと？」<br>「ああ。――夜明けだ。」',
+  // the tutorial corridor next to her cell is always safe
+  safe: (h) => h.x < 46 * TILE && h.y < 17 * TILE,
+  // as things are after the prologue: her cell door open, the rope fallen, the shaft caved in
+  after(g) {
+    const g0 = g.gates.find((x) => x.id === 'g0');
+    if (g0) { g0.locked = true; g0.open = 1; }
+    for (const d of g.world.decor) {
+      if (d.type === 'rope') { d.fallen = true; d.fallT = 99; }
+      if (d.type === 'rubble') d.shown = true;
+    }
+  },
 };
