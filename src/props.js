@@ -285,9 +285,12 @@ class Crumble {
 class LightBridge {
   constructor(e) {
     this.id = e.id; this.x = e.x - 8; this.y = e.y; this.w = e.w * TILE; this.plates = []; this.k = 0; this.on = false;
-    this.log = !!e.log; this.locked = false;
+    this.log = !!e.log; this.locked = false; this.invert = !!e.invert;
   }
-  solidBox() { return this.k > 0.6 ? { x0: this.x, x1: this.x + this.w, y0: this.y, y1: this.y + 6 } : null; }
+  solidBox() {
+    const solidNow = this.invert ? this.k < 0.4 : this.k > 0.6;       // a hatch is shut unless powered
+    return solidNow ? { x0: this.x, x1: this.x + this.w, y0: this.y, y1: this.y + (this.invert ? 16 : 6) } : null;
+  }
   update(game) {
     const want = this.locked || this.plates.some((p) => p.pressed);
     if (want !== this.on) { this.on = want; Sfx.play(want ? (this.log ? 'block' : 'save') : 'plateoff'); if (this.log) game.shake = 3; }
@@ -295,6 +298,11 @@ class LightBridge {
   }
   draw(ctx, cx, cy, t) {
     const x = Math.round(this.x - cx), y = Math.round(this.y - cy);
+    if (this.invert) {          // a wooden hatch that swings down open
+      if (this.k < 0.95) { drawTile(ctx, 'log', x, y); drawTile(ctx, 'log', x, y + 8); }
+      else { ctx.fillStyle = '#07050a'; ctx.fillRect(x, y, this.w, 16); ctx.fillStyle = '#5a4030'; ctx.fillRect(x, y, 2, 12); }
+      return;
+    }
     if (this.log) {             // logs drop into place one after another
       const n = Math.floor(this.w / 16);
       for (let i = 0; i < n; i++) {
@@ -549,7 +557,7 @@ class Lamp {
 class Pole {
   constructor(e) { this.x = e.x - 8; this.y = e.y; this.w = (e.w || 1) * TILE; }
   solidBox(self) {
-    if (!(self instanceof Hero) || self.y > this.y + 0.5) return null;
+    if (!(self instanceof Hero) || self.y > this.y + 0.5 || self.dropT > 0) return null;
     return { x0: this.x, x1: this.x + this.w, y0: this.y, y1: this.y + 3 };
   }
   draw(ctx, cx, cy) {
@@ -558,5 +566,153 @@ class Pole {
     ctx.fillStyle = '#7a5a3c'; ctx.fillRect(x, y, this.w, 2);
     ctx.fillStyle = '#9a7a54'; ctx.fillRect(x, y, this.w, 1);
     ctx.fillStyle = '#3a2620'; ctx.fillRect(x, y + 2, 2, 6); ctx.fillRect(x + this.w - 2, y + 2, 2, 6);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Chapter 4: light and mirrors.
+// A pedestal throws a beam of light while Lumina (not hooded) stands on it. Mirrors
+// (turned by Grey with ↑) bend it by 90°. A receptor struck by the beam stores
+// light and powers what it is wired to; it keeps some power for `hold` frames.
+class Pedestal {
+  constructor(e) { this.id = e.id; this.x = e.x; this.y = e.y; this.dir = e.dir || [1, 0]; this.on = false; this.lift = null; }
+  update(game) {
+    const h = game.heroine;
+    this.on = !h.hooded && ['normal', 'getup'].includes(h.state) && h.onGround && Math.abs(h.x - this.x) <= 10 && Math.abs(h.y - this.y) <= 3;
+    if (this.on && !this.wasOn) Sfx.play('save');
+    this.wasOn = this.on;
+  }
+  origin() { return { x: this.x, y: this.y - 8 }; }
+  near(hero) { return Math.abs(hero.x - this.x) < 28 && Math.abs(hero.y - this.y) < 6; }
+  // a turning pedestal: right -> up -> left -> right
+  turn() {
+    const [dx, dy] = this.dir;
+    this.dir = dx === 1 ? [0, -1] : dy === -1 ? [-1, 0] : [1, 0];
+    Sfx.play('lever');
+  }
+  draw(ctx, cx, cy) { drawTile(ctx, 'pedestal', Math.round(this.x - 8 - cx), Math.round(this.y - 8 - cy)); }
+}
+
+class Mirror {
+  constructor(e) { this.id = e.id; this.x = e.x; this.y = e.y - 8; this.kind = e.kind || 0; this.t = 0; }
+  near(hero) { return Math.abs(hero.x - this.x) < 20 && Math.abs(hero.y - 8 - this.y) < 20; }
+  turn(game) { this.kind ^= 1; this.t = 10; Sfx.play('lever'); game.particles.burst(this.x, this.y, 5, { col: '#fff0c0', life: 12, max: 0.8 }); }
+  // '/' : right -> up, up -> right, left -> down, down -> left ; '\' the other way
+  reflect([dx, dy]) { return this.kind === 0 ? [-dy, -dx] : [dy, dx]; }
+  draw(ctx, cx, cy) {
+    if (this.t > 0) this.t--;
+    drawTile(ctx, 'mirror' + this.kind, Math.round(this.x - 8 - cx), Math.round(this.y - 8 - cy - (this.t > 5 ? 1 : 0)));
+  }
+}
+
+class Receptor {
+  constructor(e) { this.id = e.id; this.x = e.x; this.y = e.y - 8; this.hold = e.hold || 0; this.charge = 0; this.hit = false; this.pressed = false; this.left = 0; this.gateIds = e.gates || []; }
+  update(game) {
+    if (this.hit) { this.charge = Math.min(1, this.charge + 1 / 40); this.left = this.hold; }
+    else if (this.left > 0) this.left--;
+    else this.charge = Math.max(0, this.charge - 1 / 30);
+    const was = this.pressed;
+    this.pressed = this.charge >= 1 || (this.pressed && this.charge > 0);
+    if (this.pressed !== was) Sfx.play(this.pressed ? 'plate' : 'plateoff');
+    this.hit = false;
+  }
+  draw(ctx, cx, cy) {
+    const x = Math.round(this.x - cx), y = Math.round(this.y - cy);
+    drawTile(ctx, this.pressed ? 'receptor_on' : 'receptor_off', x - 8, y - 8);
+    // stored light: a ring that fills up, and runs down while it holds
+    const k = this.hold && this.left > 0 && !this.hitShown ? this.left / this.hold : this.charge;
+    ctx.fillStyle = '#ffe9a8';
+    const n = Math.round(12 * k);
+    for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + i / 12 * Math.PI * 2; ctx.fillRect(Math.round(x + Math.cos(a) * 10), Math.round(y + Math.sin(a) * 10), 1, 1); }
+  }
+  light() { return this.charge > 0 ? { x: this.x, y: this.y, r: 20 + 20 * this.charge, a: 0.7 * this.charge, col: `rgba(255,230,160,${0.14 * this.charge})` } : null; }
+}
+
+// A platform wired to receptors/plates: it moves toward (x1, y1) while powered and back
+// toward (x0, y0) when not, carrying whoever stands on it. A pedestal may be fixed on it.
+class Lift {
+  constructor(e) {
+    this.id = e.id; this.w = (e.w || 3) * TILE; this.src = e.src || [];
+    this.x0 = e.x - 8; this.y0 = e.y; this.x1 = e.x - 8 + (e.dx || 0) * TILE; this.y1 = e.y + (e.dy || 0) * TILE;
+    this.x = this.x0; this.y = this.y0; this.speed = e.speed || 1; this.moving = 0;
+  }
+  solidBox() { return { x0: this.x, x1: this.x + this.w, y0: this.y, y1: this.y + 8 }; }
+  powered(game) {
+    return this.src.some((id) => {
+      const p = game.pedestals.find((q) => q.id === id);
+      if (p) return p.on;
+      const r = game.receptors.find((q) => q.id === id) || game.plates.find((q) => q.id === id);
+      return r && r.pressed;
+    });
+  }
+  update(game) {
+    // once it has made it to the top it stays there (no hole left in the floor above)
+    if (this.latched) return;
+    if (Math.abs(this.y - this.y1) < 0.5 && Math.abs(this.x - this.x1) < 0.5) { this.latched = true; Sfx.play('block'); return; }
+    let on = this.powered(game);
+    // a lift waiting at the bottom only sets off with Grey aboard (so nobody is left behind)
+    const hero = game.hero, atHome = Math.abs(this.x - this.x0) < 0.5 && Math.abs(this.y - this.y0) < 0.5;
+    const heroOn = hero.onGround && Math.abs(hero.y - this.y) < 1.5 && hero.x + hero.hw > this.x && hero.x - hero.hw < this.x + this.w;
+    // ... and waits a moment for her to step on too, if she is following
+    const h = game.heroine;
+    const herOn = h.onGround && Math.abs(h.y - this.y) < 1.5 && h.x + h.hw > this.x && h.x - h.hw < this.x + this.w;
+    this.board = heroOn ? (this.board || 0) + 1 : 0;
+    const waitHer = h.mode === 'follow' && !herOn && Math.abs(h.y - hero.y) < 3 * TILE && this.board < 600;
+    if (on && atHome && (!heroOn || waitHer)) on = false;
+    // on the way up it needs Grey aboard: if he falls off, it sinks back down for him
+    if (on && !atHome && !heroOn) on = false;
+    const tx = on ? this.x1 : this.x0, ty = on ? this.y1 : this.y0;
+    const dx = clamp(tx - this.x, -this.speed, this.speed), dy = clamp(ty - this.y, -this.speed, this.speed);
+    const mv = dx || dy ? 1 : 0;
+    if (mv !== this.moving) { this.moving = mv; if (mv) Sfx.play('gate'); }
+    if (!dx && !dy) return;
+    // riders: anyone standing on top moves with it
+    const riders = [game.hero, game.heroine, ...game.blocks, ...game.shadows.filter((s) => s.alive)].filter((a) =>
+      a.onGround && Math.abs(a.y - this.y) < 1.5 && a.x + a.hw > this.x && a.x - a.hw < this.x + this.w);
+    this.x += dx; this.y += dy;
+    for (const a of riders) { a.x += dx; a.y += dy; }
+    if (this.pedestal) { this.pedestal.x += dx; this.pedestal.y += dy; }
+    // never crush anyone against a ceiling: stop if a rider would be inside a wall
+    for (const a of riders) {
+      if (game.world.boxHitTiles(a.x - a.hw, a.y - a.h, a.x + a.hw, a.y)) { this.x -= dx; this.y -= dy; for (const b of riders) { b.x -= dx; b.y -= dy; } if (this.pedestal) { this.pedestal.x -= dx; this.pedestal.y -= dy; } break; }
+    }
+    if (game.t % 10 === 0) game.shake = Math.max(game.shake, 0.6);
+  }
+  draw(ctx, cx, cy) { const n = Math.round(this.w / 48); for (let i = 0; i < n; i++) drawTile(ctx, 'lift', Math.round(this.x - cx) + i * 48 * (this.w / (48 * n)), Math.round(this.y - cy)); }
+}
+
+// A great wheel of four platforms turning around a hub while powered.
+class Wheel {
+  constructor(e) {
+    this.id = e.id; this.cx = e.x; this.cy = e.y - 8; this.r = (e.r || 3) * TILE; this.src = e.src || [];
+    this.a = 0; this.spin = e.spin || 0.006; this.n = 4;
+    this.plats = [];
+    for (let i = 0; i < this.n; i++) {
+      const p = { w: 32, x: 0, y: 0, i, solidBox() { return { x0: this.x - 16, x1: this.x + 16, y0: this.y, y1: this.y + 6 }; } };
+      this.plats.push(p);
+    }
+    this.place();
+  }
+  place() { for (const p of this.plats) { const a = this.a + p.i / this.n * Math.PI * 2; p.x = this.cx + Math.cos(a) * this.r; p.y = this.cy + Math.sin(a) * this.r; } }
+  update(game) {
+    const on = this.src.some((id) => { const r = game.receptors.find((q) => q.id === id); return r && r.pressed; });
+    if (!on) return;
+    const before = this.plats.map((p) => ({ x: p.x, y: p.y }));
+    const riders = this.plats.map((p) => [game.hero, game.heroine].filter((a) => a.onGround && Math.abs(a.y - p.y) < 1.5 && Math.abs(a.x - p.x) < 16 + a.hw));
+    this.a += this.spin;
+    this.place();
+    this.plats.forEach((p, k) => { for (const a of riders[k]) { a.x += p.x - before[k].x; a.y += p.y - before[k].y; } });
+    if (game.t % 16 === 0) Sfx.play('push');
+  }
+  draw(ctx, cx, cy) {
+    const x = Math.round(this.cx - cx), y = Math.round(this.cy - cy);
+    ctx.strokeStyle = '#5a4030'; ctx.lineWidth = 2;
+    for (const p of this.plats) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(Math.round(p.x - cx), Math.round(p.y - cy) + 3); ctx.stroke(); }
+    ctx.fillStyle = '#8a6a30'; ctx.fillRect(x - 5, y - 5, 10, 10); ctx.fillStyle = '#d0a050'; ctx.fillRect(x - 2, y - 2, 4, 4);
+    for (const p of this.plats) {
+      const px = Math.round(p.x - 16 - cx), py = Math.round(p.y - cy);
+      ctx.fillStyle = '#1a1014'; ctx.fillRect(px - 1, py - 1, 34, 8);
+      ctx.fillStyle = '#6a4a30'; ctx.fillRect(px, py, 32, 5); ctx.fillStyle = '#b08a50'; ctx.fillRect(px, py, 32, 1);
+    }
   }
 }

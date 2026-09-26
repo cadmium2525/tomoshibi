@@ -35,6 +35,17 @@ const Cut = {
   // cutscene characters: npc('marta', 'marta', 12, 16, {lit: true}) / npcOff('marta')
   npc: (key, name, tx, ty, opt) => ({ start: (g) => g.addNpc(key, name, tx * TILE + 8, ty * TILE, opt) }),
   npcOff: (key) => ({ start: (g) => g.removeNpc(key) }),
+  // a full-screen picture (skipped if the file is not there)
+  image: (src) => ({
+    start: (g, s) => {
+      s.ok = true;
+      g.showCenter(`<img class="memory" src="${src}" alt="">`, true);
+      const img = g.ui.center.querySelector('img');
+      img.onerror = () => { s.ok = false; };
+    },
+    update: (g, s, t) => !s.ok || (t > 40 && advance()),
+    end: (g) => g.hideCenter(),
+  }),
   chapter: (num, title) => ({
     start: (g) => g.showChapter(num, title),
     update: (g, s, t) => t >= 170,
@@ -125,6 +136,61 @@ function bellsScript(retry) {
     Cut.fade(0, 30),
     Cut.run((g) => { Sfx.play('lever'); g.shake = 3; }),
     Cut.say('hero', 'ルミナ、手を！ 北の門まで 走るぞ！', 'hero', 90),
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Chapter 4: the logbook, the flood of shadows, the great lamp.
+// ---------------------------------------------------------------------------
+const hold = () => Cut.run((g) => { g.hero.setState('scripted'); g.heroine.setState('scripted'); g.hero.vx = g.heroine.vx = 0; });
+function logbookScript() {
+  return [
+    hold(),
+    Cut.run((g) => { g.heroine.facing = 1; }),
+    Cut.talk('ルミナ', 'グレイさん、これ……。 灯守りの 日誌？'),
+    Cut.talk('グレイ', '……！ ルミナ、それは――'),
+    Cut.talk('ルミナ', '「十三年前、大影の夜。 女王陛下の命により、王女殿下を 地下聖堂へ お運びする。 ――灯守り グレイ」'),
+    Cut.image('assets/story/memory.webp'),
+    Cut.talk('ルミナ', '……うそ。 グレイさんが……？'),
+    Cut.talk('グレイ', '……本当だ。 あの夜、君を 聖堂へ 運んだのは、わたしだ。'),
+    Cut.run((g) => { g.shake = 6; Sfx.play('emerge'); g.fade = 0.5; g.heroine.emote('!', 80); }),
+    Cut.wait(40),
+    Cut.talk('ルミナ', '……っ。 ……いまは、なにも 聞きたくない。'),
+    Cut.talk('グレイ', '（ルミナの光が 揺らいでいる。 ……離れては いけない）'),
+  ];
+}
+function bossStartScript() {
+  return [
+    hold(),
+    Cut.run((g) => { g.shake = 8; Sfx.play('emerge'); g.heroine.emote('!', 80); }),
+    Cut.talk('ルミナ', 'やだ……！ 光が、とまらない……！'),
+    Cut.walk('heroine', 80, 1),
+    Cut.talk('グレイ', 'ルミナ！ 台座から 離れるな！ その光で 影を 還すんだ！'),
+    Cut.run((g) => g.notify('boss_start', 200)),
+  ];
+}
+function afterBossScript() {
+  return [
+    hold(),
+    Cut.wait(40),
+    Cut.talk('グレイ', 'ルミナ。 ……すまなかった。'),
+    Cut.talk('グレイ', 'あの夜、君を 暗闇へ 運んだのは わたしだ。 許してほしくて 迎えに行ったんじゃない。'),
+    Cut.talk('グレイ', '……ただ、君に 光のある場所を 見せたかった。'),
+    Cut.talk('ルミナ', '……わたしを 連れて行ったのも、迎えに来てくれたのも、あなただったんだね。'),
+    Cut.run((g) => g.heroine.emote('♥', 90)),
+    Cut.talk('ルミナ', '……来てくれて、ありがとう。 グレイさん。'),
+  ];
+}
+function lampScript() {
+  return [
+    hold(),
+    Cut.talk('グレイ', 'この火を 最後に 消したのも、わたしだ。 ……十三年ぶりだな。'),
+    Cut.run((g) => { g.fade = 1; Sfx.play('clear'); g.shake = 4; }),
+    Cut.wait(60),
+    Cut.talk('ルミナ', 'きれい……。 これが、グレイさんの 守ってた 灯り？'),
+    Cut.talk('グレイ', 'ああ。 ……君の 光だよ。'),
+    Cut.talk('ルミナ', 'みて……。 塔の影が、谷の ほうへ 伸びていく。'),
+    Cut.talk('グレイ', '影の子らが 帰っていく。 ……あの谷へ。 行こう、ルミナ。'),
   ];
 }
 

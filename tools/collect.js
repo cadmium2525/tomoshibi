@@ -4,7 +4,13 @@
 // start from a spot on the main path (reported as "ok? (...)" when it does not).
 window.collectTest = function (only = null) {
   const H = () => game.hero, Y = () => game.heroine, tile = (v) => v / 16;
-  const run = (n, keys = [], taps = []) => { for (let i = 0; i < n; i++) { T.run(1, keys, i === 0 ? taps : []); if (game.state === 'read') { T.run(20); T.run(2, [], ['KeyZ']); } } };
+  const run = (n, keys = [], taps = []) => {
+    for (let i = 0; i < n; i++) {
+      T.run(1, keys, i === 0 ? taps : []);
+      if (game.state === 'read') { T.run(20); T.run(2, [], ['KeyZ']); }
+      if (game.state === 'cutscene' && game.cutSkip) game.cutSkip();
+    }
+  };
   const land = () => { let j = 0; while (!H().onGround && j++ < 120) run(1); run(2); };
   const walk = (tx, max = 400) => { let i = 0; while (Math.abs(tile(H().x) - tx) > 0.2 && i++ < max) run(1, [tile(H().x) < tx ? 'ArrowRight' : 'ArrowLeft']); land(); };
   // jump and steer toward tile x while in the air
@@ -29,10 +35,13 @@ window.collectTest = function (only = null) {
     game.state = 'play'; game.hideCenter();
     game.guards = []; game.dawnZone = null; game.ambushes = []; game.spawnCd = 99999;
     if (game.collapse) game.collapse.x = -9999;
+    // lifts stand where riding them leaves them (up top, covering their shafts)
+    for (const l of game.lifts) { l.x = l.x1; l.y = l.y1; l.latched = true; if (l.pedestal) { l.pedestal.x += l.x1 - l.x0; l.pedestal.y += l.y1 - l.y0; } }
   };
   const esc = (x, y) => ({ x: x * 16, y: y * 16, escape: true, levers: [], shrines: [], ambush: [], blocks: {} });
   const lampOn = (id, x, s) => { tp(x - 3, s, x, s); Y().hooded = false; run(20); if (!game.lamps.find((l) => l.id === id).lit) throw new Error('lamp ' + id); };
   const got = (id) => game.collected.has(id);
+  window.CT = { start, tp, hop, walk, jump, run, land };   // for poking at one detour by hand
 
   const tests = {
     // ---- chapter 1
@@ -63,6 +72,19 @@ window.collectTest = function (only = null) {
     c3f4: () => { start(3); lampOn('L2', 250.5, 30); tp(244.5, 30, 250.5); jump(-1, 16); walk(242.6); jump(-1, 16); walk(241.6); jump(-1, 16); walk(239.4); },
     c3j3: () => { start(3); tp(303.4, 27, 299, 30); jump(); },
     c3f5: () => { start(3, esc(321.5, 22)); tp(400.5, 20, 398.5); jump(); },
+    // ---- chapter 4
+    c4f1: () => { start(4); tp(9, 112, 7); walk(4.6); hop(4.5); hop(5.5); hop(4.5); hop(2.6); walk(2.5); },
+    c4j1: () => { start(4); tp(30, 112, 32.5); run(60); walk(22.5); walk(21.5); land(); run(4, ['ArrowDown']); land(); walk(23.3); },
+    c4f2: () => { start(4); tp(88, 98, 86); walk(91.8); hop(92.6); hop(92.6); hop(92.6); hop(93.8); walk(96.5); },
+    c4j2: () => { start(4); tp(84, 84, 80); walk(93.4); hop(94.5); hop(95.5); hop(96.5); hop(97.8); walk(98.4); },
+    c4f3: () => {
+      start(4); tp(74, 64, 70.5); run(40); walk(76.8); run(1, [], ['ArrowUp']); run(80);
+      if (!game.receptors.find((r) => r.id === 'R4b').pressed) throw new Error('R4b not lit');
+      walk(61.4);
+    },
+    c4f4: () => { start(4); tp(103, 24, 101.5); hop(102.6); hop(103.3); walk(103.4); },
+    c4f5: () => { start(4); game.bossDone = true; tp(70, 24, 68); walk(73.5); for (let i = 0; i < 6; i++) hop(74.6); walk(78.5); },
+    c4j3: () => { start(4); game.bossDone = true; tp(70, 24, 68); walk(73.5); for (let i = 0; i < 6; i++) hop(74.6); walk(78.5); walk(79.3); hop(82.4); walk(83.4); },
   };
   const out = [];
   for (const id in tests) {

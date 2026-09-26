@@ -16,6 +16,10 @@ const THEMES = {
     back2: (r) => 'plaster' + Math.floor(r * 4),
     deep: '#0e0c14', shade: 'rgba(8,8,14,0.66)', edges: ['#14121a', '#8a8898', '#3a3844', '#34323e'],
     sky: { grad: 'sky3', far: 'far3', mid: 'mid3', farFill: '#1a1830', midFill: '#121020' } },
+  tower: { front: (r) => 'tst' + Math.floor(r * 4), top: 'ttop', back: (r) => 'twall' + (r < 0.04 ? 1 : [0, 2, 3][Math.floor(r * 3)]),
+    back2: () => 'shelf0',
+    deep: '#140e12', shade: 'rgba(14,8,12,0.66)', edges: ['#160e12', '#b09a86', '#40302e', '#3a2c2c'],
+    sky: { grad: 'sky4', far: 'far4', mid: 'mid4', farFill: '#3c2440', midFill: '#221624' } },
 };
 
 class World {
@@ -195,6 +199,12 @@ class World {
         // town
         case 'shopsign': drawTile(ctx, 'shopsign' + (d.v || 0), x, y); break;
         case 'flowerbox': drawTile(ctx, 'flowerbox', x, y); break;
+        case 'gear': {                            // turns slowly in the background
+          ctx.save(); ctx.translate(Math.round(x + 18), Math.round(y + 18)); ctx.rotate(t * 0.004 * (d.v || 1));
+          drawTile(ctx, 'gear', -18, -18); ctx.restore();
+          break;
+        }
+        case 'twindow': drawTile(ctx, 'twindow', x, y); break;
         case 'cat': if (Math.floor(t / 400 + d.x) % 5) drawTile(ctx, 'cat', x + 2, y - 8); break;     // now and then it wanders off
         case 'smoke':                             // someone keeps a stove going behind the shutters
           for (let i = 0; i < 5; i++) {

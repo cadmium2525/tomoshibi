@@ -22,6 +22,7 @@ class Hero extends Body {
     if (this.flash > 0) this.flash--;
     if (this.landT > 0) this.landT--;
     if (this.takeoff > 0) this.takeoff--;
+    if (this.dropT > 0) this.dropT--;
     const dir = (I.down('right') ? 1 : 0) - (I.down('left') ? 1 : 0);
 
     switch (this.state) {
@@ -55,6 +56,8 @@ class Hero extends Body {
         if (I.released('jump') && this.vy < -1.6) this.vy *= 0.5;
         if (I.pressed('attack') && this.attackCd <= 0) {
           this.state = 'attack'; this.t = 0; this.hitList.clear(); this.tipHist = []; Sfx.play('swing');
+        } else if (this.onGround && I.down('down') && !dir && game.onPole(this)) {
+          this.dropT = 10;                          // ↓ on a pole: let go and drop through it
         } else if (this.onGround && I.down('down') && !dir) {
           this.state = 'reach'; this.t = 0; this.vx = 0;
         } else if (I.pressed('up')) {
@@ -427,7 +430,7 @@ class Heroine extends Body {
     }
     if (this.mode === 'wait') {
       // told to wait next to a stone plate (or heading for one to open a gate): step onto it
-      const p = this.plateGoal || game.plateNear(this, 30);
+      const p = this.plateGoal || game.pedestalOrPlate(this, 44);
       const pd = p ? sign(p.x - this.x) : 0;
       const res = p && Math.abs(p.x - this.x) > 1.5 ? this.probe(w, pd) : null;
       if (res === 'clear') {
@@ -593,6 +596,11 @@ class Shadow extends Body {
     // smoky wisps
     if (this.state !== 'die' && this.t % 4 === 0) {
       game.particles.add({ x: this.x + rand(-8, 8), y: this.y - rand(10, 40) + this.sinkOffset, vx: rand(-0.2, 0.2), vy: rand(-0.6, -0.2), life: 26, col: Math.random() < 0.6 ? '#140a20' : '#3a2058', size: 2, shrink: true });
+    }
+    // a shadow left far behind (another floor, cut off) fades back into the dark after a while
+    if (this.state === 'seek' && !this.wave) {
+      this.lostT = Math.hypot(h.x - this.x, h.y - this.y) > 300 ? (this.lostT || 0) + 1 : 0;
+      if (this.lostT > 300) { this.setState('die'); return; }
     }
     switch (this.state) {
       case 'emerge':
@@ -964,5 +972,32 @@ class Guard extends Body {
     drawSprite(ctx, 'guard', this.frame(), x, y, this.facing < 0);
     const icon = this.state === 'alert' || this.state === 'chase' ? '!' : this.state === 'lost' ? '?' : null;
     if (icon) drawIcon(ctx, icon, x, y - 48, icon === '!' ? '#d02030' : '#303060');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The great shadow of chapter 4: a tall shadow with long arms. Slow, hard to
+// knock back, and it takes a long time in the light (or many blows) to return.
+class BigShadow extends Shadow {
+  constructor(portal) {
+    super(portal);
+    this.hw = 11; this.h = 66; this.hp = 12; this.big = true;
+  }
+  walk(game, dir, speed) { super.walk(game, dir, speed * 0.55); }
+  hit(game, dir) {
+    const ok = super.hit(game, dir);
+    if (ok) { this.vx *= 0.3; this.vy = 0; game.shake = 3; }
+    return ok;
+  }
+  draw(ctx, cx, cy) {
+    const x = this.x - cx, y = this.y - cy;
+    ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.scale(1.7, 1.7);
+    const opt = {};
+    if (this.state === 'emerge') opt.clipBottom = 0;
+    if (this.state === 'sink') opt.clipBottom = 0;
+    if (this.state === 'die') opt.alpha = 1 - this.t / 36;
+    if (this.flash > 0 && (this.flash >> 1) % 2) opt.white = true;
+    drawSprite(ctx, 'shadow', this.frame(), 0, (this.sinkOffset || 0) / 1.7, this.facing < 0, opt);
+    ctx.restore();
   }
 }

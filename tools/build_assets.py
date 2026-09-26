@@ -6,7 +6,7 @@ import json, os
 import numpy as np
 from PIL import Image
 from pixlib import Atlas, to_data_uri
-import build_sprites, heroine, shadow, tiles, npc, forest, town, guard
+import build_sprites, heroine, shadow, tiles, npc, forest, town, guard, tower
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "src", "assets_gen.js")
@@ -76,6 +76,7 @@ def main():
     T = tiles.all_items()
     T.update(forest.all_items())
     T.update(town.all_items())
+    T.update(tower.all_items())
     at = Atlas(256)
     for k, v in T.items():
         at.add(k, v, 0, 0)
@@ -83,6 +84,9 @@ def main():
     data["tiles"] = {"src": to_data_uri(im4), "f": rects}
     data["bgfar"] = {"src": to_data_uri(Image.fromarray(tiles.bg_far(), "RGBA"))}
     data["bgmid"] = {"src": to_data_uri(Image.fromarray(tiles.bg_mid(), "RGBA"))}
+    data["sky4"] = {"src": to_data_uri(Image.fromarray(tower.dusk_sky(), "RGBA"))}
+    data["far4"] = {"src": to_data_uri(Image.fromarray(tower.far_hills(), "RGBA"))}
+    data["mid4"] = {"src": to_data_uri(Image.fromarray(tower.ruins(), "RGBA"))}
     data["sky3"] = {"src": to_data_uri(Image.fromarray(town.night_sky(), "RGBA"))}
     data["far3"] = {"src": to_data_uri(Image.fromarray(town.castle(), "RGBA"))}
     data["mid3"] = {"src": to_data_uri(Image.fromarray(town.roofs(), "RGBA"))}

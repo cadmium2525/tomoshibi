@@ -85,6 +85,9 @@ class Game {
     this.markers = []; this.doorways = []; this.mist = null; this.dawnZone = null; this.dawn = null;
     this.dawnDone = false; this.sun = 0;
     this.poles = []; this.sanctuaries = [];
+    this.pedestals = []; this.mirrors = []; this.receptors = []; this.lifts = []; this.wheels = []; this.beams = [];
+    this.logbook = null; this.bossSpot = null; this.boss = null; this.bossDone = false; this.greatLamp = null;
+    this.flicker = false; this.flickT = 0;
     this.guards = []; this.lamps = []; this.fear = 0; this.fearCd = 0; this.nooks = []; this.martaSpot = null; this.npcSpots = [];
     this.darks = (stage.darks || []).map(([x0, y0, x1, y1]) => ({ x0: x0 * TILE, y0: y0 * TILE, x1: (x1 + 1) * TILE, y1: (y1 + 1) * TILE }));
     for (const e of stage.ents) {
@@ -110,6 +113,14 @@ class Game {
         case 'guard': this.guards.push(new Guard(e)); break;
         case 'lamp': this.lamps.push(new Lamp(e)); break;
         case 'pole': this.poles.push(new Pole(e)); break;
+        case 'pedestal': { const p = new Pedestal(e); p.turnable = !!e.turn; this.pedestals.push(p); break; }
+        case 'mirror': this.mirrors.push(new Mirror(e)); break;
+        case 'receptor': this.receptors.push(new Receptor(e)); break;
+        case 'lift': this.lifts.push(new Lift(e)); break;
+        case 'wheel': this.wheels.push(new Wheel(e)); break;
+        case 'logbook': this.logbook = { x: e.x, y: e.y, done: false }; break;
+        case 'boss': this.bossSpot = { x: e.x, y: e.y, x0: e.x0 * TILE, x1: (e.x1 + 1) * TILE }; break;
+        case 'greatlamp': { const r = new Receptor({ id: 'lamp', x: e.x, y: e.y }); r.lamp = true; this.receptors.push(r); this.greatLamp = r; break; }
         case 'sanctuary': this.sanctuaries.push({ x0: e.x - 8, x1: (e.x1 + 1) * TILE }); break;
         case 'nook': this.nooks.push({ x0: e.x - 8, x1: e.x - 8 + (e.w || 1) * TILE, y: e.y }); break;
         case 'marta': this.martaSpot = { x: e.x, y: e.y, done: false }; break;
@@ -119,17 +130,24 @@ class Game {
         case 'dawn': this.dawnZone = { x0: e.x, x1: (e.x1 + 1) * TILE, y: e.y }; break;
       }
     }
-    for (const g of this.gates) g.plates = this.plates.filter((p) => p.gateIds.includes(g.id));
-    for (const b of this.bridges) b.plates = this.plates.filter((p) => p.gateIds.includes(b.id));
+    for (const g of this.gates) g.plates = [...this.plates, ...this.receptors].filter((p) => p.gateIds.includes(g.id));
+    for (const p of this.pedestals) {               // a pedestal fixed on a lift rides with it
+      const e = stage.ents.find((q) => q.type === 'pedestal' && q.id === p.id);
+      if (e && e.lift) { const L = this.lifts.find((l) => l.id === e.lift); L.pedestal = p; p.lift = L; }
+    }
+    for (const b of this.bridges) b.plates = [...this.plates, ...this.receptors].filter((p) => p.gateIds.includes(b.id));
     this.world.dyn = [...this.gates, ...this.blocks, ...this.crumbles, ...this.bridges, ...this.rocks, ...this.markers];
     if (this.mist) this.world.dyn.push(this.mist);
-    this.world.dyn.push(...this.poles);
+    this.world.dyn.push(...this.poles, ...this.lifts);
+    for (const w of this.wheels) this.world.dyn.push(...w.plats);
     if (cp) {
       for (const l of this.levers) if (cp.levers.includes(l.id)) { l.on = true; }
       for (const g of this.gates) if (this.levers.some((l) => l.on && l.gateIds.includes(g.id))) { g.locked = true; g.open = 1; }
       for (const s of this.shrines) if (cp.shrines.includes(s.id)) s.lit = true;
       for (const a of this.ambushes) if (cp.ambush.includes(a.id)) { a.done = true; a.wave = a.waves.length; }
       if (cp.dawn) { this.dawnDone = true; this.sun = 1; if (this.mist) this.mist.k = 0; }
+      if (cp.revealed && this.logbook) { this.logbook.done = true; this.flicker = !cp.bossDone; }
+      if (cp.bossDone) this.bossDone = true;
       for (const b of this.blocks) { const p = cp.blocks[b.id]; if (p) { b.x = p.x; b.y = p.y; } }
       if (cp.x !== undefined) {
         this.hero.x = cp.x + 12; this.hero.y = cp.y; this.hero.facing = 1;
@@ -154,6 +172,7 @@ class Game {
   saveCheckpoint(shrine) {
     this.checkpoint = {
       x: shrine.x, y: shrine.y, escape: !!shrine.escape, dawn: this.dawnDone,
+      revealed: !!(this.logbook && this.logbook.done), bossDone: this.bossDone,
       levers: this.levers.filter((l) => l.on).map((l) => l.id),
       shrines: this.shrines.filter((s) => s.lit).map((s) => s.id),
       ambush: this.ambushes.filter((a) => a.done).map((a) => a.id),
@@ -168,6 +187,7 @@ class Game {
     const cp = this.checkpoint || {};
     return {
       x: cp.x, y: cp.y, escape: cp.escape, dawn: this.dawnDone,
+      revealed: !!(this.logbook && this.logbook.done), bossDone: this.bossDone,
       levers: this.levers.filter((l) => l.on).map((l) => l.id),
       shrines: this.shrines.filter((s) => s.lit).map((s) => s.id),
       ambush: this.ambushes.filter((a) => a.done).map((a) => a.id),
@@ -308,11 +328,19 @@ class Game {
     for (const r of this.rocks) r.update(this);
     for (const it of this.items) it.update(this);
     for (const L of this.lamps) L.update(this);
+    for (const p of this.pedestals) p.update(this);
+    this.traceBeams();
+    for (const r of this.receptors) r.update(this);
+    for (const l of this.lifts) l.update(this);
+    for (const w of this.wheels) w.update(this);
     for (const m of this.markers) m.update(this);
     for (const gd of this.guards) { gd.update(this); if (this.state !== 'play') return; }
     this.updateFear();
     if (this.mist) this.mist.update(this);
     this.updateDawn();
+    if (this.updateLogbook()) return;
+    this.updateFlicker();
+    if (this.updateBoss()) return;
     if (this.updateMarta()) return;
     if (this.updateLookout()) return;
     for (const p of this.plates) p.update(this);
@@ -631,6 +659,7 @@ class Game {
     return true;
   }
 
+  onPole(hero) { return this.poles.some((p) => Math.abs(hero.y - p.y) < 1 && hero.x + hero.hw > p.x && hero.x - hero.hw < p.x + p.w); }
   inSanctuary(x) { return this.sanctuaries.some((s) => x >= s.x0 && x < s.x1); }
   inNook(h) { return this.nooks.some((n) => h.x >= n.x0 && h.x <= n.x1 && Math.abs(h.y - n.y) < 4); }
 
@@ -649,6 +678,8 @@ class Game {
 
   tryLever(hero) {
     for (const l of this.levers) if (l.near(hero)) { l.pull(this); return true; }
+    for (const m of this.mirrors) if (m.near(hero)) { m.turn(this); return true; }
+    for (const p of this.pedestals) if (p.turnable && p.near(hero)) { p.turn(); return true; }
     return false;
   }
 
@@ -787,6 +818,7 @@ class Game {
     return null;
   }
 
+  pedestalOrPlate(h, d) { return this.plateNear(h, d) || this.pedestals.find((p) => Math.abs(p.x - h.x) < d && Math.abs(p.y - h.y) < 6) || null; }
   plateNear(a, r) {
     for (const p of this.plates) {
       if (Math.abs(p.y - a.y) > 2 || Math.abs(p.x - a.x) > r) continue;
@@ -898,6 +930,144 @@ class Game {
     this.cutSkip = () => { this.cut = null; this.hideTalk(); this.beginEscape(first); };
     const script = CHAPTERS[this.chapter].escapeScript || collapseScript;
     this.cut = new Cutscene(this, script(retry), () => this.beginEscape(first));
+  }
+
+  // ---- chapter 4: the logbook, her unsteady light, the flood of shadows, the great lamp --
+  updateLogbook() {
+    const L = this.logbook, hero = this.hero;
+    if (!L || L.done || !hero.onGround || Math.abs(hero.x - L.x) > 24 || Math.abs(hero.y - L.y) > 12) return false;
+    L.done = true;
+    this.startScene(logbookScript(), () => { this.flicker = true; this.flickT = 0; this.notify('flicker', 240); });
+    return true;
+  }
+  // a scripted scene in the middle of play; afterwards play goes on where it was
+  startScene(steps, after) {
+    this.state = 'cutscene';
+    this.ui.skip.style.display = 'block'; this.ui.hud.style.display = 'none';
+    for (const s of this.shadows) if (s.alive) { s.alive = false; if (s.portal) s.portal.users--; }
+    const done = () => {
+      this.cut = null; this.hideTalk(); this.hideCenter();
+      this.hero.setState('normal'); this.heroine.setState('normal'); this.hero.pose = null; this.heroine.pose = null;
+      this.hero.front = false; this.heroine.mode = 'follow';
+      this.ui.skip.style.display = 'none'; this.ui.hud.style.display = 'flex';
+      this.fade = 0; this.state = 'play';
+      if (after) after();
+    };
+    this.cutSkip = done;
+    this.cut = new Cutscene(this, steps, done);
+  }
+
+  // after the truth: now and then her light surges and shadows gather (fewer with Grey close)
+  updateFlicker() {
+    if (!this.flicker || this.boss) return;
+    const h = this.heroine;
+    this.flickT++;
+    if (this.flickT === 1080) h.emote('!', 60);
+    if (this.flickT > 1080 && this.flickT % 8 === 0) this.particles.burst(h.x, h.y - 16, 2, { col: '#fff4c0', life: 16, max: 1.4 });
+    if (this.flickT >= 1200) {
+      this.flickT = 0;
+      const near = Math.abs(this.hero.x - h.x) < 48 && Math.abs(this.hero.y - h.y) < 30;
+      Sfx.play('emerge'); this.shake = 2;
+      for (let i = 0; i < (near ? 1 : 2); i++) this.spawnNear(h);
+    }
+  }
+  flickering() { return this.flicker && this.flickT > 1080; }
+
+  updateBoss() {
+    const B = this.bossSpot, hero = this.hero, h = this.heroine;
+    if (!B || this.bossDone) {
+      // afterwards: light the great lamp from the pedestal
+      if (this.bossDone && this.greatLamp && this.greatLamp.pressed && !this.lampLit) {
+        this.lampLit = true;
+        this.startScene(lampScript(), () => {
+          this.exitDoor = new Lookout({ x: B.x, y: B.y });
+          this.state = 'ending'; this.et = 0;
+          this.hero.setState('scripted'); this.heroine.setState('scripted');
+          Sfx.stopBgm(); Sfx.play('clear');
+        });
+        return true;
+      }
+      return false;
+    }
+    if (!this.boss) {
+      if (hero.onGround && hero.x < B.x1 - 5 * TILE && Math.abs(hero.y - B.y) < 30) {
+        this.boss = { phase: 1, t: 0, killed: 0, spawned: 0 };
+        this.flicker = false;
+        this.startScene(bossStartScript(), () => { this.heroine.mode = 'wait'; this.notify('boss_turn', 300); });
+        return true;
+      }
+      return false;
+    }
+    const S = this.boss;
+    S.t++;
+    const alive = this.shadows.filter((s) => s.alive && s.state !== 'die');
+    const spawnAt = (left, fly) => {
+      const x = left ? B.x0 + 3 * TILE : B.x1 - 3 * TILE;
+      if (fly) { const f = new FlyShadow(x, B.y - 120); this.shadows.push(f); return f; }
+      return this.spawnShadow(x, B.y);
+    };
+    if (S.phase === 1) {                        // shadows from the floor, on both sides
+      if (S.spawned < 7 && alive.length < 3 && S.t % 70 === 0) { spawnAt(S.spawned % 2 === 0, false); S.spawned++; }
+      if (S.spawned >= 7 && !alive.length) { S.phase = 2; S.spawned = 0; S.t = 0; this.say(h, '……うえから くる！', 'cry', 90); }
+    } else if (S.phase === 2) {                 // then out of the dark overhead
+      if (S.spawned < 6 && alive.length < 3 && S.t % 80 === 0) { spawnAt(S.spawned % 2 === 1, true); S.spawned++; }
+      if (S.spawned >= 6 && !alive.length) { S.phase = 3; S.t = 0; this.say(this.hero, '……大きいのが 来るぞ！', 'hero', 90); }
+    } else if (S.phase === 3) {                 // the great shadow
+      if (S.t === 60) {
+        const p = new Portal(B.x0 + 4 * TILE, B.y); this.portals.push(p);
+        S.big = new BigShadow(p); this.shadows.push(S.big); Sfx.play('emerge'); this.shake = 6;
+      }
+      if (S.t > 60 && S.big && !S.big.alive) {
+        this.boss = null; this.bossDone = true;
+        this.startScene(afterBossScript(), () => { this.heroine.mode = 'wait'; this.notify('lamp_hint', 300); });
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // ---- chapter 4: beams of light ----------------------------------------------------
+  // Walk each beam from its pedestal: mirrors bend it, walls and closed gates stop it,
+  // receptors drink it, shadows it touches come apart into light.
+  traceBeams() {
+    this.beams = [];
+    const w = this.world;
+    for (const p of this.pedestals) {
+      if (!p.on) continue;
+      let { x, y } = p.origin(), [dx, dy] = p.dir, start = { x, y }, lastM = null;
+      for (let step = 0, turns = 0; step < 500 && turns < 16; step++) {
+        x += dx * 4; y += dy * 4;
+        const m = this.mirrors.find((q) => q !== lastM && Math.abs(q.x - x) < 5 && Math.abs(q.y - y) < 5);
+        if (m) { x = m.x; y = m.y; this.beams.push([start, { x, y }]); [dx, dy] = m.reflect([dx, dy]); start = { x, y }; lastM = m; turns++; continue; }
+        const r = this.receptors.find((q) => Math.abs(q.x - x) < 7 && Math.abs(q.y - y) < 7);
+        if (r) { r.hit = true; break; }
+        if (w.boxHit(x - 1, y - 1, x + 1, y + 1)) break;
+        for (const s of this.shadows) {
+          if (!s.alive || s.state === 'die' || s.state === 'emerge') continue;
+          if (overlap({ x0: x - 2, x1: x + 2, y0: y - 2, y1: y + 2 }, s.box())) s.beamT = (s.beamT || 0) + 1;
+        }
+        if (x < 0 || y < 0 || x > w.pw || y > w.ph) break;
+      }
+      this.beams.push([start, { x, y }]);
+    }
+    for (const s of this.shadows) {
+      if ((s.beamT || 0) >= 14) { s.beamT = 0; if (s.state === 'emerge') s.state = 'seek'; s.hit(this, sign(s.x - this.heroine.x) || 1); }
+      else if (s.beamT) s.beamT = Math.max(0, s.beamT - 0.5);
+    }
+  }
+
+  drawBeams(ctx, cx, cy) {
+    if (!this.beams.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const [a, b] of this.beams) {
+      const ax = Math.round(a.x - cx), ay = Math.round(a.y - cy), bx = Math.round(b.x - cx), by = Math.round(b.y - cy);
+      const x0 = Math.min(ax, bx), y0 = Math.min(ay, by), wdt = Math.abs(bx - ax), hgt = Math.abs(by - ay);
+      ctx.fillStyle = 'rgba(255,220,140,0.22)'; ctx.fillRect(x0 - 3, y0 - 3, wdt + 6, hgt + 6);
+      ctx.fillStyle = 'rgba(255,240,200,0.55)'; ctx.fillRect(x0 - 1, y0 - 1, wdt + 2, hgt + 2);
+      ctx.fillStyle = '#fffbe8'; ctx.fillRect(x0, y0, Math.max(1, wdt), Math.max(1, hgt));
+    }
+    ctx.restore();
   }
 
   // ---- the hill at dawn: hold out until the sun is up --------------------------------
@@ -1207,6 +1377,14 @@ class Game {
     }
     for (const L of this.lamps) L.draw(ctx, cx, cy);
     for (const p of this.poles) p.draw(ctx, cx, cy);
+    for (const l of this.lifts) l.draw(ctx, cx, cy);
+    for (const w of this.wheels) w.draw(ctx, cx, cy);
+    for (const p of this.pedestals) p.draw(ctx, cx, cy);
+    for (const r of this.receptors) {
+      if (r.lamp) drawTile(ctx, r.pressed ? 'glamp_on' : 'glamp_off', Math.round(r.x - 24 - cx), Math.round(r.y + 8 - 56 - cy));
+      else r.draw(ctx, cx, cy);
+    }
+    for (const m of this.mirrors) m.draw(ctx, cx, cy);
     for (const m of this.markers) m.drawStone(ctx, cx, cy);
     for (const m of this.markers) m.drawShadow(ctx, cx, cy, T);
     for (const s of this.signs) s.draw(ctx, cx, cy);
@@ -1243,6 +1421,7 @@ class Game {
     this.particles.draw(ctx, cx, cy);
     if (this.collapse) this.collapse.draw(ctx, cx, cy);
     if (this.mist) this.mist.draw(ctx, cx, cy);
+    this.drawBeams(ctx, cx, cy);
 
     // bottomless pits fade to black
     const g = ctx.createLinearGradient(0, w.ph - 110 - cy, 0, w.ph - 20 - cy);
@@ -1303,13 +1482,19 @@ class Game {
     L.push({ x: hero.x, y: hero.y - 20, r: 58, a: 0.55 });
     const fl = hero.caneFlare();
     if (fl > 0) { const tip = hero.caneTip(); L.push({ x: tip.x, y: tip.y - 2, r: 24 + 34 * fl, a: 0.85, col: `rgba(255,150,60,${0.22 * fl})` }); }
-    L.push(h.hooded ? { x: h.x, y: h.y - 16, r: 18, a: 0.4 } : { x: h.x, y: h.y - 16, r: 50, a: 0.8, col: 'rgba(200,220,255,0.10)' });
+    const flk = this.flickering() ? (Math.random() < 0.5 ? 1.6 : 0.5) : 1;
+    L.push(h.hooded ? { x: h.x, y: h.y - 16, r: 18, a: 0.4 } : { x: h.x, y: h.y - 16, r: 50 * flk, a: 0.8, col: `rgba(200,220,255,${0.10 * flk})` });
     for (const lp of this.lamps) { const l = lp.light(); if (l) L.push(l); }
     for (const p of this.plates) { const l = p.light(); if (l) L.push(l); }
     for (const s of this.shrines) { const l = s.light(); if (l) L.push(l); }
     if (this.door) L.push(this.door.light());
     for (const n of this.npcs) { const l = n.light(); if (l) L.push(l); }
     for (const b of this.bridges) { const l = b.light(); if (l) L.push(l); }
+    for (const r of this.receptors) { const l = r.light(); if (l) L.push(l); }
+    for (const [a, b] of this.beams) {           // light along every beam
+      const n = Math.max(1, Math.floor(Math.hypot(b.x - a.x, b.y - a.y) / 40));
+      for (let i = 0; i <= n; i++) L.push({ x: lerp(a.x, b.x, i / n), y: lerp(a.y, b.y, i / n), r: 30, a: 0.7, col: 'rgba(255,240,190,0.07)' });
+    }
     for (const m of this.markers) if (m.len > 8) L.push({ x: m.x + m.dir * (4 + m.len / 2), y: m.top, r: 14 + m.len * 0.35, a: 0.5, col: 'rgba(140,110,255,0.08)' });
     for (const it of this.items) L.push(it.light());
     if (this.exitDoor) L.push(this.exitDoor.light());
@@ -1324,7 +1509,7 @@ class Game {
     const hr = this.hero, inDark = this.darks.some((d) => hr.x >= d.x0 && hr.x < d.x1 && hr.y > d.y0 && hr.y <= d.y1);
     lc.fillStyle = inDark ? 'rgba(2,2,6,0.95)'
       : this.world.theme === 'forest' ? `rgba(8,6,24,${0.46 * (1 - 0.85 * this.sun)})`
-      : this.world.theme === 'town' ? 'rgba(6,5,16,0.6)' : 'rgba(5,3,14,0.64)';
+      : this.world.theme === 'town' ? 'rgba(6,5,16,0.6)' : this.world.theme === 'tower' ? 'rgba(10,6,14,0.55)' : 'rgba(5,3,14,0.64)';
     lc.fillRect(0, 0, VW, VH);
     lc.globalCompositeOperation = 'destination-out';
     const L = this.lights();
@@ -1373,6 +1558,8 @@ class Game {
     const hero = this.hero, h = this.heroine;
     const bob = Math.round(Math.sin(this.t * 0.15) * 1.5);
     for (const l of this.levers) if (!l.on && l.near(hero)) drawIcon(ctx, '↑', l.x - cx, l.y - 18 - cy + bob, '#2040a0');
+    for (const m of this.mirrors) if (m.near(hero)) drawIcon(ctx, '↑', m.x - cx, m.y - 12 - cy + bob, '#2040a0');
+    for (const p of this.pedestals) if (p.turnable && p.near(hero)) drawIcon(ctx, '↑', p.x - cx, p.y - 44 - cy + bob, '#2040a0');
     const b = hero.state === 'normal' && this.liftable(hero);
     if (b) drawIcon(ctx, '↑', b.x - cx, b.y - 24 - cy + bob, '#2040a0');
     // show ↓ when kneeling would help her
