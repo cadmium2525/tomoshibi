@@ -1,5 +1,7 @@
 // Can every collectible actually be picked up? One small scripted detour per item.
 // Load the page with ?debug, load this file, then: collectTest() -> list of results.
+// Run autoplay() / autoplay2() / autoplay3() first: then every detour is also checked to
+// start from a spot on the main path (reported as "ok? (...)" when it does not).
 window.collectTest = function (only = null) {
   const H = () => game.hero, Y = () => game.heroine, tile = (v) => v / 16;
   const run = (n, keys = [], taps = []) => { for (let i = 0; i < n; i++) { T.run(1, keys, i === 0 ? taps : []); if (game.state === 'read') { T.run(20); T.run(2, [], ['KeyZ']); } } };
@@ -9,7 +11,11 @@ window.collectTest = function (only = null) {
   const hop = (tx, n = 16) => { for (let i = 0; i < 60; i++) { const k = Math.abs(tile(H().x) - tx) > 0.15 ? [tile(H().x) < tx ? 'ArrowRight' : 'ArrowLeft'] : []; run(1, i < n ? [...k, 'KeyZ'] : k); if (i > 4 && H().onGround) break; } land(); };
   const jump = (dir = 0, n = 16) => { const k = dir > 0 ? ['ArrowRight'] : dir < 0 ? ['ArrowLeft'] : []; run(n, [...k, 'KeyZ']); run(10, k); land(); };
   // hero feet on surface row `s` (tile x hx), Lumina at yx
+  // every detour must start from a place the full run (autoplay) actually stood on
+  let offPath = null;
   const tp = (hx, s, yx = hx - 1.5, ys = s) => {
+    const V = T.visited[game.chapter];
+    if (V && ![-1, 0, 1].some((d) => V.has(Math.floor(hx + d) + ',' + s))) offPath = `start ${hx},${s} is not on the main path`;
     const h = H(), y = Y();
     h.x = hx * 16; h.y = s * 16; h.vx = h.vy = 0; h.setState('normal'); h.held = null;
     y.x = yx * 16; y.y = ys * 16; y.vx = y.vy = 0; y.setState('normal'); y.mode = 'wait';
@@ -31,28 +37,29 @@ window.collectTest = function (only = null) {
   const tests = {
     // ---- chapter 1
     f1: () => { start(1); tp(9, 16); walk(3); },
-    f2: () => { start(1); tp(40.6, 26, 44); jump(); },
+    f2: () => { start(1); tp(48.5, 26, 47); walk(40.6); jump(); },
     f3: () => { start(1); tp(80.6, 33, 79.5); jump(); },
     f4: () => { start(1); tp(175.2, 17, 172, 22); jump(); },
     f5: () => { start(1, esc(258.5, 30)); tp(364.5, 20, 362); jump(); },
-    j1: () => { start(1); tp(44, 34, 46); walk(41.2); },
+    j1: () => { start(1); tp(53.5, 34, 55); walk(41.2); },
     j2: () => { start(1); tp(157, 22, 156); walk(160.4); },
-    j3: () => { start(1); game.door.opening = true; game.door.passed = true; tp(234.6, 22, 226); walk(235.3); jump(1); jump(-1, 16); walk(233.5); },
+    j3: () => { start(1); game.door.opening = true; game.door.passed = true; tp(231.5, 22, 226); walk(235.3); jump(1); jump(-1, 16); walk(233.5); },
     // ---- chapter 2
     c2f1: () => { start(2); tp(37.4, 24, 35); jump(); },
     c2f2: () => { start(2); tp(92.4, 20, 84, 24); jump(); },
     c2f3: () => { start(2); tp(126.4, 27, 124); jump(); },
     c2f4: () => { start(2); tp(150.5, 27, 155.8); run(40); jump(-1, 16); walk(149); jump(-1, 16); walk(147.5); },
     c2f5: () => { start(2); tp(262.4, 24, 260); jump(); },
-    c2j1: () => { start(2); tp(93, 24, 92); walk(96.4); },
+    c2j1: () => { start(2); const g = game.gates.find((x) => x.id === 'g1'); g.locked = true; g.open = 1; tp(85, 24, 83); walk(96.4); },
     c2j2: () => { start(2); tp(229.5, 27, 227); walk(230.6); jump(1); walk(232.4); jump(); },
     c2j3: () => { start(2); tp(257.4, 24, 255); jump(); },
     // ---- chapter 3
     c3f1: () => { start(3); tp(7.5, 30, 10); jump(-1, 16); walk(2.6); walk(3.4); jump(1, 16); walk(4.6); jump(1, 16); walk(7); if (tile(H().x) < 6) throw new Error('stuck in the yard'); },
     c3j1: () => { start(3); lampOn('L1', 91.5, 28); tp(95, 28, 91.5); run(20); jump(0, 16); walk(95.4); jump(1, 16); walk(97.5); },
     c3f2: () => { start(3); tp(136.4, 23, 135); hop(137.6); hop(139.8); hop(142); },
-    c3f3: () => { start(3); tp(233.4, 36, 231, 32); hop(235.5); hop(237.5); hop(239.5); },
-    c3j2: () => { start(3); tp(233.4, 36, 231, 32); for (const x of [235.5, 237.5, 239.5, 241.5, 243.5, 245.6]) hop(x); walk(246.5); },
+    // (start on the sewer floor, on the main path, below the hole)
+    c3f3: () => { start(3); tp(194, 36, 191); hop(196); hop(196); hop(196); hop(196); walk(199.4); hop(202.5); walk(203.4); },
+    c3j2: () => { start(3); tp(194, 36, 191); hop(196); hop(196); hop(196); hop(196); walk(199.4); hop(202.5); walk(205.4); hop(207.5); walk(211.4); },
     c3f4: () => { start(3); lampOn('L2', 250.5, 30); tp(244.5, 30, 250.5); jump(-1, 16); walk(242.6); jump(-1, 16); walk(241.6); jump(-1, 16); walk(239.4); },
     c3j3: () => { start(3); tp(303.4, 27, 299, 30); jump(); },
     c3f5: () => { start(3, esc(321.5, 22)); tp(400.5, 20, 398.5); jump(); },
@@ -61,7 +68,9 @@ window.collectTest = function (only = null) {
   for (const id in tests) {
     if (only && !only.includes(id)) continue;
     let res;
+    offPath = null;
     try { tests[id](); res = got(id) ? 'ok' : 'NOT COLLECTED'; } catch (e) { res = 'ERR ' + e.message; }
+    if (offPath && res === 'ok') res = 'ok? (' + offPath + ')';
     out.push(`${id}: ${res}  (hero ${tile(H().x).toFixed(1)},${tile(H().y).toFixed(1)})`);
   }
   return out.join('\n');

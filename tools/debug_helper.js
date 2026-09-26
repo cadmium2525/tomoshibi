@@ -1,5 +1,6 @@
 // paste into the browser console (or load with ?debug) to drive the game frame by frame
 window.T = {
+  visited: {},
   run(frames, keys = [], taps = []) {
     if (game.state === 'title') game.startNew();
     if (game.state === 'cutscene' && !game.cutSkip) game.finishPrologue();     // tests start right after the prologue
@@ -7,6 +8,9 @@ window.T = {
       Input.keys.clear(); keys.forEach((k) => Input.keys.add(k));
       if (i === 0) taps.forEach((k) => Input.taps.add(k));
       Input.poll(); game.update();
+      // remember where Grey has stood (the main path, for tools/collect.js)
+      const h = game.hero;
+      if (h && h.onGround && game.state === 'play') (T.visited[game.chapter] = T.visited[game.chapter] || new Set()).add(Math.floor(h.x / 16) + ',' + Math.round(h.y / 16));
     }
     Input.keys.clear(); game.render(); return T.st();
   },

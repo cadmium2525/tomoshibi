@@ -83,10 +83,13 @@ function buildStage3() {
   // the way up: out of the sewer by a stair of ledges
   tunnel(227, 26, 232, 30); fill(229, 34, 232, 35); fill(231, 32, 232, 33);
   street(233, 236, 30);
-  // past the stair, deeper in: stepping stones nobody can see without light, then a dead end
-  tunnel(233, 31, 247, 35);
-  water(234, 244); for (const x of [235, 237, 239, 241, 243]) fill(x, 36, x, 36);
-  darks.push([233, 31, 247, 40]);
+  // a hole in the sewer's ceiling and poles only Grey can climb: an old overflow channel above,
+  // dark, with gaps you only see by her light (a fragment and a page lie in it)
+  carve(195, 28, 197, 30);
+  ent('pole', 195, 33, { w: 3 }); ent('pole', 195, 31, { w: 3 }); ent('pole', 195, 29, { w: 3 }); ent('pole', 195, 27, { w: 3 });
+  tunnel(186, 23, 212, 27);                          // the channel (floor at row 28)
+  carve(200, 28, 201, 30); carve(206, 28, 206, 30);  // gaps: a fall back into the sewer
+  darks.push([186, 22, 212, 30]);
   dec('chain', 190, 31, { len: 2 });
 
   // ===== E: the town square ======================================================
@@ -148,8 +151,8 @@ function buildStage3() {
   ent('shard', 2, 30, { id: 'c3f1' });               // A: in the sunken yard
   ent('page', 97, 23, { id: 'c3j1' });               // B: on the balcony (lamp + barrel shadow)
   ent('shard', 142, 14, { id: 'c3f2' });             // C: on the highest pole above the roofs
-  ent('shard', 239, 33, { id: 'c3f3' });             // D: over the unseen stones
-  ent('page', 246, 35, { id: 'c3j2' });              // D: the dead end deep in the sewer
+  ent('shard', 203, 26, { id: 'c3f3' });             // D: in the overflow channel above the sewer
+  ent('page', 211, 27, { id: 'c3j2' });              // D: at its dead end
   ent('shard', 239, 22, { id: 'c3f4' });             // E: on top of the clock tower
   ent('page', 303, 23, { id: 'c3j3' });              // F: Marta's diary on the shelf above the landing
   ent('shard', 400, 16, { id: 'c3f5' });             // G: high over the last roof - a jump that costs a moment
