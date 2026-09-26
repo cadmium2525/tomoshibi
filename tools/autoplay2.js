@@ -51,7 +51,7 @@ window.autoplay2 = function () {
     }
     note('fight done');
   }
-  const M = (id) => game.markers[['m1', 'm2', 'm3', 'm4'].indexOf(id)];
+  const M = (id) => game.markers.find((m) => m.id === id);
 
   if (game.state === 'title' || game.chapter !== 2) { game.startChapter(2); }
   if (game.state === 'cutscene') game.finishIntro();
@@ -88,7 +88,7 @@ window.autoplay2 = function () {
   call(); frames(60); face(-1); reach('catch E');
   // she landed just left of the second stone: keep her there, then step onto its shadow
   call(); if (Y().mode !== 'wait' || Y().x > M('m4').x) fail('wait E2');
-  walkTo(170.9); walkTo(179); walkTo(180.5); frames(1, [], ['ArrowUp']); frames(40); call();
+  walkTo(170.6); jumpRight(); walkTo(179); walkTo(180.5); frames(1, [], ['ArrowUp']); frames(40); call();
   waitFor(() => Y().x > 178 * 16 && Y().state === 'normal', 600, 'she crossed E');
   // --- F: ambush
   walkTo(207); waitFor(() => herNear(48), 400, 'F');

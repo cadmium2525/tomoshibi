@@ -676,7 +676,7 @@ class Shadow extends Body {
   }
 
   hit(game, dir) {
-    if (!['seek', 'grab', 'carry', 'sink', 'swipe', 'hurt'].includes(this.state) && !(this.state === 'emerge' && this.t > 20)) return false;
+    if (!['seek', 'grab', 'carry', 'sink', 'swipe', 'hurt', 'fly', 'dive', 'flee'].includes(this.state) && !(this.state === 'emerge' && this.t > 20)) return false;
     const h = game.heroine;
     if (h.carriedBy === this) {
       h.carriedBy = null; h.setState('down');
@@ -726,5 +726,76 @@ class Shadow extends Body {
     if (this.state === 'die') opt.alpha = 1 - this.t / 36;
     if (this.flash > 0 && (this.flash >> 1) % 2) opt.white = true;
     drawSprite(ctx, 'shadow', this.frame(), x, y + this.sinkOffset, this.facing < 0, opt);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// A shadow with wings: swoops down on Lumina from the sky, flies off low with
+// her, then lands and sinks into a pool of dark like the others do.
+// Hitting it at any point frees her; knocked down, it walks like the rest.
+class FlyShadow extends Shadow {
+  constructor(x, y) {
+    super({ x, y, users: 0 });
+    this.state = 'fly'; this.hp = 2; this.swipeCd = 9999;
+  }
+  groundBelow(w) {
+    for (let k = 0; k < 240; k += 2) if (w.pointSolid(this.x, this.y + k)) return Math.floor((this.y + k) / TILE) * TILE;
+    return null;
+  }
+  update(game) {
+    if (!['fly', 'dive', 'flee'].includes(this.state)) { super.update(game); return; }
+    this.t++; this.animT++;
+    if (this.flash > 0) this.flash--;
+    const h = game.heroine, hero = game.hero, w = game.world;
+    if (this.t % 4 === 0) game.particles.add({ x: this.x + rand(-8, 8), y: this.y - rand(10, 40), vx: rand(-0.2, 0.2), vy: rand(-0.6, -0.2), life: 26, col: Math.random() < 0.6 ? '#140a20' : '#3a2058', size: 2, shrink: true });
+    if (this.state === 'fly') {
+      // circle above her, then drop on her
+      const tx = h.x + Math.sin(this.t * 0.03) * 30, ty = h.y - 70 + Math.sin(this.t * 0.07) * 6;
+      this.x += clamp(tx - this.x, -1.4, 1.4); this.y += clamp(ty - this.y, -1.2, 1.2);
+      this.facing = sign(h.x - this.x) || this.facing;
+      if (this.t > 70 && Math.abs(this.x - h.x) < 14 && h.grabbable() && !h.carriedBy) { this.setState('dive'); Sfx.play('swing'); }
+    } else if (this.state === 'dive') {
+      this.x += clamp(h.x - this.x, -1, 1);
+      this.y += 2.8;
+      if (Math.abs(h.x - this.x) < 14 && Math.abs(h.y - this.y) < 16 && h.grabbable() && !h.carriedBy) {
+        h.carriedBy = this; h.setState('carried'); h.mode = 'follow';
+        this.setState('flee'); Sfx.play('grab'); game.stats.grabs++;
+        if (!game.flags.grabHint) { game.flags.grabHint = true; game.notify('hint_grab', 240); }
+      } else if (this.y > h.y + 6 || this.groundBelow(w) - this.y < 2) { this.setState('fly'); this.t = 40; }
+    } else {
+      // flee low, away from Grey, then land and sink
+      const dir = sign(this.x - hero.x) || this.facing;
+      this.facing = dir;
+      const g = this.groundBelow(w);
+      const nx = this.x + dir * 0.8;
+      if (!w.boxHit(nx - 7, this.y - 40, nx + 7, this.y - 1)) this.x = nx;
+      if (g !== null) this.y += clamp(g - 28 - this.y, -1, 1);
+      if (this.t > 110 && g !== null) {
+        this.y = g;
+        const p = new Portal(this.x, g);
+        game.portals.push(p);
+        this.portal = p; p.users++;
+        this.setState('sink');
+      }
+    }
+  }
+  frame() {
+    if (this.state === 'flee') return 'carry' + (Math.floor(this.animT / 10) % 4);
+    if (this.state === 'fly' || this.state === 'dive') return 'walk' + (Math.floor(this.animT / 9) % 4);
+    return super.frame();
+  }
+  draw(ctx, cx, cy) {
+    if (['fly', 'dive', 'flee'].includes(this.state)) {
+      // ragged wings of smoke
+      const x = Math.round(this.x - cx), y = Math.round(this.y - cy) - 30, f = Math.sin(this.animT * 0.3);
+      for (const s of [-1, 1]) {
+        for (let i = 0; i < 18; i++) {
+          const wy = y - Math.round(f * (i / 2)) + Math.round(i * 0.3), hgt = 8 - Math.floor(i / 3);
+          ctx.fillStyle = '#7a58c0'; ctx.fillRect(x + s * (4 + i), wy - 1, 1, 1);          // lit upper edge
+          ctx.fillStyle = '#1a0c2c'; ctx.fillRect(x + s * (4 + i), wy, 1, Math.max(1, hgt));
+        }
+      }
+    }
+    super.draw(ctx, cx, cy);
   }
 }

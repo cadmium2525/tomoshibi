@@ -396,11 +396,11 @@ class Collapse {
 // background (anyone walks past it).
 class Marker {
   constructor(e) {
-    this.x = e.x; this.y = e.y; this.top = e.y - 30;
+    this.id = e.id; this.x = e.x; this.y = e.y; this.top = e.y - 30;
     this.len = 0; this.dir = 1; this.want = 0;
   }
   solidBox(self) {
-    if (!(self instanceof Hero) || this.len < 6) return null;
+    if (!(self instanceof Hero) || this.len < 6 || self.y > this.top + 0.5) return null;
     const x0 = this.dir > 0 ? this.x + 4 : this.x - 4 - this.len;
     return { x0, x1: x0 + this.len, y0: this.top, y1: this.top + 5 };
   }

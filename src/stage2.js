@@ -32,7 +32,6 @@ function buildStage2() {
   ent('hero', 9, 27);
   ent('heroine', 7, 27);
   ent('sign', 12, 27, { text: 'hint_sky', hidden: true });
-  ent('sign', 28, 25, { text: 'hint_pull', hidden: true });
   ent('shrine', 34, 23, { id: 's1' });
   dec('tree', 11, 28); dec('tree_s', 23, 27); dec('tree', 38, 24); dec('tree_s', 43, 24);
   dec('bush', 17, 28); dec('bush', 29, 26, { v: 1 }); dec('fern', 21, 27); dec('fern', 40, 24);
@@ -58,7 +57,6 @@ function buildStage2() {
   ent('marker', 86, 23, { id: 'm2' });
   ent('gate', 89, 21, { id: 'g1', wood: true });
   ent('lever', 93, 19, { id: 'lv2', gates: ['g1'] });
-  ent('sign', 83, 23, { text: 'sign_climb' });
   dec('tree_s', 82, 24); dec('tree', 94, 20); dec('tree_s', 102, 20); dec('bush', 106, 24, { v: 1 }); dec('tree', 113, 22);
 
   // ===== D: the valley of fallen trees =========================================
@@ -68,7 +66,6 @@ function buildStage2() {
   ent('block', 118, 21, { id: 'b1' });
   ent('plate', 136, 26, { id: 'p1', gates: ['g2'] });
   ent('gate', 141, 24, { id: 'g2' });
-  ent('sign', 127, 26, { text: 'sign_valley' });
   ent('shrine', 145, 26, { id: 's3' });
   dec('stump', 121, 22); dec('tree', 130, 27); dec('bush', 138, 27); dec('tree_s', 149, 27); dec('tree', 155, 27); dec('fern', 133, 27);
 
@@ -77,8 +74,9 @@ function buildStage2() {
   ground(168, 171, 27);                            // a little island
   pit(172, 177);
   ground(178, 236, 27);
-  ent('shrine', 157, 26, { id: 's4' });
-  ent('sign', 160, 26, { text: 'sign_two' });
+  // a stone whose shadow is only useful thrown backwards: leave her on its far side
+  ent('marker', 154, 26, { id: 'm5' });
+  fill(146, 23, 148, 23);                          // a shelf (a fragment lies on it)
   ent('marker', 163, 26, { id: 'm3' });
   ent('marker', 170, 26, { id: 'm4' });
   ent('lightbridge', 172, 26, { id: 'lb2', w: 6, log: true });
@@ -104,7 +102,7 @@ function buildStage2() {
   ent('shard', 37, 20, { id: 'c2f1' });
   ent('shard', 92, 16, { id: 'c2f2' });
   ent('shard', 126, 23, { id: 'c2f3' });
-  ent('shard', 175, 21, { id: 'c2f4' });
+  ent('shard', 147, 21, { id: 'c2f4' });
   ent('shard', 262, 20, { id: 'c2f5' });
   ent('page', 96, 23, { id: 'c2j1' });              // in the tunnel under the cliff
   ent('page', 232, 22, { id: 'c2j2' });             // on the low rock
@@ -134,13 +132,7 @@ const CH2_PAGES = {
 };
 const CH2_TEXT = {
   hint_sky: N('ルミナ') + '……風が、つめたくて きもちいい。',
-  hint_pull: N('ヒント') + '2段の段差は、上から {down} で ルミナを 引き上げよう。',
-  sign_marker: N('道標石') + '「灯を掲げし者 影をたどれ」<br>' + N('ヒント') +
-    'ルミナの光が 石の影を 反対側へ伸ばす。影は グレイだけが乗れる足場になる。<br>' +
-    'ルミナが石に近いほど 影は長い。石の手前で {call}「待て」をしてから渡ろう。 ついてこさせると、影の向きが変わってしまう。',
-  sign_climb: N('ヒント') + '影の足場は、石の頭の高さにできる。踏み台にして 崖を登れそうだ。',
-  sign_valley: N('ヒント') + '高い所のルミナは、下で {down} を押して 受け止めよう。重り石は 持ったまま 飛び降りることもできる。',
-  sign_two: N('ヒント') + '石が 二つ。 小島へ渡ったら、ルミナを受け止めて 呼び寄せよう。',
+  sign_marker: N('道標石') + '「灯を掲げし者 影をたどれ」<br>ルミナの光が 石の影を伸ばしている。影には グレイだけが乗れそうだ。',
   dawn_start: N('グレイ') + '影が 集まってくる……！ 日が昇るまで、ルミナを 守り抜くぞ！',
   dawn_end: N('ルミナ') + '……あったかい。 影が、光の中に とけていく……。',
   mist: N('グレイ') + '濃い霧だ……。 日が昇れば 晴れるだろう。',

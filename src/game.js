@@ -852,7 +852,7 @@ class Game {
     const hero = this.hero, h = this.heroine;
     if (!this.dawn) {
       if (hero.x >= z.x0 && Math.abs(hero.y - z.y) < 48) {
-        this.dawn = { t: 0, dur: 2700, spawnT: 90 };
+        this.dawn = { t: 0, dur: 1800, spawnT: 90, n: 0 };
         this.notify('dawn_start', 220);
         h.emote('!', 60);
       } else if (this.mist && Math.abs(hero.x - this.mist.x) < 30 && !this.flags.mistMsg) {
@@ -866,8 +866,13 @@ class Game {
     const alive = this.shadows.filter((s) => s.alive).length;
     // they come less often as the light grows
     if (--D.spawnT <= 0 && alive < 3 && h.state !== 'carried') {
-      if (this.spawnNear(h)) Sfx.play('emerge');
-      D.spawnT = Math.round(130 + 170 * this.sun);
+      // every other one comes out of the sky
+      if (D.n++ % 2) {
+        const side = Math.random() < 0.5 ? -1 : 1;
+        this.shadows.push(new FlyShadow(h.x + side * 170, h.y - 120));
+        Sfx.play('emerge');
+      } else if (this.spawnNear(h)) Sfx.play('emerge');
+      D.spawnT = Math.round(110 + 130 * this.sun);
     }
     if (D.t % 60 === 0 && this.sun < 1) Sfx.play('heart');
     if (D.t >= D.dur) {
