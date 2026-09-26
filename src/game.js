@@ -882,6 +882,7 @@ class Game {
         s.state = 'seek'; s.hp = 1; s.hit(this, 1);
       }
       this.notify('dawn_end', 220);
+      this.say(hero, '丘の上から 麓が見えるはずだ。 行ってみよう。', 'hero', 200);
       Sfx.play('clear');
       this.fade = 0.6;
     }
@@ -891,7 +892,7 @@ class Game {
   updateLookout() {
     const d = this.exitDoor, hero = this.hero, h = this.heroine;
     if (!d || !d.walk || this.escape) return false;
-    if (hero.onGround && Math.abs(hero.x - d.x) < 20 && Math.abs(hero.y - d.y) < 8 &&
+    if (hero.onGround && Math.abs(hero.x - d.x) < 28 && Math.abs(hero.y - d.y) < 8 &&
         Math.abs(h.x - d.x) < 60 && h.state === 'normal') {
       this.state = 'ending'; this.et = 0;
       hero.setState('scripted'); h.setState('scripted');

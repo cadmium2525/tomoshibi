@@ -787,10 +787,10 @@ class FlyShadow extends Shadow {
   draw(ctx, cx, cy) {
     if (['fly', 'dive', 'flee'].includes(this.state)) {
       // ragged wings of smoke
-      const x = Math.round(this.x - cx), y = Math.round(this.y - cy) - 30, f = Math.sin(this.animT * 0.3);
+      const x = Math.round(this.x - cx), y = Math.round(this.y - cy) - 40, f = Math.sin(this.animT * 0.3);
       for (const s of [-1, 1]) {
-        for (let i = 0; i < 18; i++) {
-          const wy = y - Math.round(f * (i / 2)) + Math.round(i * 0.3), hgt = 8 - Math.floor(i / 3);
+        for (let i = 0; i < 26; i++) {
+          const wy = y - Math.round(f * (i * 0.7)) - Math.round(i * 0.25), hgt = 12 - Math.floor(i / 2.6);
           ctx.fillStyle = '#7a58c0'; ctx.fillRect(x + s * (4 + i), wy - 1, 1, 1);          // lit upper edge
           ctx.fillStyle = '#1a0c2c'; ctx.fillRect(x + s * (4 + i), wy, 1, Math.max(1, hgt));
         }

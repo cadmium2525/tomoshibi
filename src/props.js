@@ -462,6 +462,23 @@ class Mist {
 // The end of a chapter out of doors: a lookout where the two stop and watch.
 class Lookout {
   constructor(e) { this.x = e.x; this.y = e.y; this.open = 1; }
-  draw() {}
+  draw(ctx, cx, cy, t) {
+    const x = Math.round(this.x - cx), y = Math.round(this.y - cy);
+    // a wooden railing at the edge of the hill and an old signpost
+    ctx.fillStyle = '#3a2620';
+    for (const px of [14, 26, 38]) ctx.fillRect(x + px, y - 14, 3, 14);
+    ctx.fillRect(x + 12, y - 13, 30, 2); ctx.fillRect(x + 12, y - 7, 30, 2);
+    ctx.fillStyle = '#6a4a34'; ctx.fillRect(x + 12, y - 14, 30, 1);
+    ctx.fillStyle = '#3a2620'; ctx.fillRect(x - 14, y - 26, 2, 26);
+    ctx.fillStyle = '#7a5a3c'; ctx.fillRect(x - 21, y - 26, 16, 7);
+    ctx.fillStyle = '#3a2620'; ctx.fillRect(x - 19, y - 23, 12, 1);
+    if (!game.dawnDone) return;
+    // once the sun is up: a pillar of light and a bobbing arrow show where to stand
+    const k = 0.5 + 0.5 * Math.sin(t * 0.08);
+    const g = ctx.createLinearGradient(0, y - 90, 0, y);
+    g.addColorStop(0, 'rgba(255,236,190,0)'); g.addColorStop(1, `rgba(255,236,190,${0.25 + 0.2 * k})`);
+    ctx.fillStyle = g; ctx.fillRect(x - 10, y - 90, 20, 90);
+    drawIcon(ctx, '↓', x, y - 50 + Math.round(Math.sin(t * 0.15) * 2), '#c07020');
+  }
   light() { return { x: this.x, y: this.y - 30, r: 90, a: 0.6, col: 'rgba(255,210,160,0.12)' }; }
 }
