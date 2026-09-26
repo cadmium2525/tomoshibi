@@ -5,6 +5,7 @@
 class Gate {
   constructor(e) {
     this.id = e.id; this.gx = e.x - 8; this.gy = e.y - 16;   // top-left of the 16x48 slot
+    this.tile = e.wood ? 'woodgate' : 'gate';
     this.open = 0; this.locked = false; this.plates = []; this.moving = 0;
   }
   solidBox() {
@@ -36,7 +37,7 @@ class Gate {
     const x = this.gx - cx, y = this.gy - cy;
     ctx.save();
     ctx.beginPath(); ctx.rect(x, y - 2, 16, 50); ctx.clip();
-    drawTile(ctx, 'gate', x, y - Math.round(48 * this.open));
+    drawTile(ctx, this.tile, x, y - Math.round(48 * this.open));
     ctx.restore();
   }
 }
@@ -68,7 +69,9 @@ class Lever {
     if (this.on) return;
     this.on = true; Sfx.play('lever'); game.shake = 3;
     for (const g of game.gates) if (this.gateIds.includes(g.id)) g.locked = true;
-    game.say(game.hero, 'よし、これで門は開いたままだ。', 'hero', 90);
+    let bridge = false;
+    for (const b of game.bridges) if (this.gateIds.includes(b.id)) { b.locked = true; bridge = true; }
+    game.say(game.hero, bridge ? 'よし、橋が架かった。' : 'よし、これで門は開いたままだ。', 'hero', 90);
   }
   draw(ctx, cx, cy) { drawTile(ctx, this.on ? 'lever_on' : 'lever_off', this.x - 8 - cx, this.y - 16 - cy); }
 }
@@ -185,6 +188,12 @@ class Door {
   draw(ctx, cx, cy, t) {
     const x = Math.round(this.x - cx), y = Math.round(this.y - cy);
     drawTile(ctx, 'door_frame', x - 32, y - 72);
+    // a way back into the dark (the cathedral's back door, seen from outside)
+    if (this.dark) {
+      ctx.fillStyle = '#07050c'; ctx.fillRect(x - 22, y - 50, 44, 50);
+      ctx.fillStyle = '#120e1c'; ctx.fillRect(x - 22, y - 50, 44, 3);
+      return;
+    }
     // light spilling from behind
     if (this.open > 0) {
       const k = this.open;
@@ -273,15 +282,27 @@ class Crumble {
 
 // Bridge of light: solid while any of its plates is pressed.
 class LightBridge {
-  constructor(e) { this.id = e.id; this.x = e.x - 8; this.y = e.y; this.w = e.w * TILE; this.plates = []; this.k = 0; this.on = false; }
+  constructor(e) {
+    this.id = e.id; this.x = e.x - 8; this.y = e.y; this.w = e.w * TILE; this.plates = []; this.k = 0; this.on = false;
+    this.log = !!e.log; this.locked = false;
+  }
   solidBox() { return this.k > 0.6 ? { x0: this.x, x1: this.x + this.w, y0: this.y, y1: this.y + 6 } : null; }
   update(game) {
-    const want = this.plates.some((p) => p.pressed);
-    if (want !== this.on) { this.on = want; Sfx.play(want ? 'save' : 'plateoff'); }
+    const want = this.locked || this.plates.some((p) => p.pressed);
+    if (want !== this.on) { this.on = want; Sfx.play(want ? (this.log ? 'block' : 'save') : 'plateoff'); if (this.log) game.shake = 3; }
     this.k = want ? Math.min(1, this.k + 0.06) : Math.max(0, this.k - 0.08);
   }
   draw(ctx, cx, cy, t) {
     const x = Math.round(this.x - cx), y = Math.round(this.y - cy);
+    if (this.log) {             // logs drop into place one after another
+      const n = Math.floor(this.w / 16);
+      for (let i = 0; i < n; i++) {
+        const k = clamp(this.k * (n + 2) - i, 0, 1);
+        if (k <= 0) continue;
+        drawTile(ctx, 'log', x + i * 16, y - Math.round((1 - k) * 40));
+      }
+      return;
+    }
     // faint dotted outline where the bridge will appear
     ctx.fillStyle = 'rgba(120,230,255,0.25)';
     for (let i = 0; i < this.w; i += 4) ctx.fillRect(x + i, y + 2, 2, 1);
@@ -299,7 +320,7 @@ class LightBridge {
     }
     ctx.globalAlpha = 1;
   }
-  light() { return this.k > 0 ? { x: this.x + this.w / 2, y: this.y, r: 30 + this.w * 0.45 * this.k, a: 0.7 * this.k, col: `rgba(90,220,240,${0.12 * this.k})` } : null; }
+  light() { return this.k > 0 && !this.log ? { x: this.x + this.w / 2, y: this.y, r: 30 + this.w * 0.45 * this.k, a: 0.7 * this.k, col: `rgba(90,220,240,${0.12 * this.k})` } : null; }
 }
 
 // Rock that drops from the ceiling during the escape and then lies in the way.
@@ -366,4 +387,81 @@ class Collapse {
       ctx.fillRect(Math.round(bx), Math.round(by), 6 + (i % 3) * 2, 5 + (i % 2) * 2);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// 道標石 and its shadow. Lumina's light throws the stone's shadow away from her;
+// the shadow is a ledge at the stone's head height that only Grey can stand on.
+// The nearer she stands, the longer it reaches. The stone itself stands in the
+// background (anyone walks past it).
+class Marker {
+  constructor(e) {
+    this.x = e.x; this.y = e.y; this.top = e.y - 30;
+    this.len = 0; this.dir = 1; this.want = 0;
+  }
+  solidBox(self) {
+    if (!(self instanceof Hero) || this.len < 6) return null;
+    const x0 = this.dir > 0 ? this.x + 4 : this.x - 4 - this.len;
+    return { x0, x1: x0 + this.len, y0: this.top, y1: this.top + 5 };
+  }
+  update(game) {
+    const h = game.heroine;
+    const dx = this.x - h.x, d = Math.abs(dx);
+    const lit = ['normal', 'getup', 'hand', 'hop', 'scripted'].includes(h.state) && h.state !== 'carried' &&
+      Math.abs(h.y - this.y) < 40 && d > 6 && d < 150;
+    // the nearer the light, the longer the shadow (up to 8 tiles)
+    this.want = lit ? clamp((150 - d) * 1.05, 0, 128) : 0;
+    // a shadow stops where it meets rock
+    if (this.want > 0) {
+      const w = game.world, dir0 = sign(dx) || this.dir;
+      for (let s = 0; s < this.want; s += 4) {
+        const px = this.x + dir0 * (4 + s);
+        if (w.boxHit(px - 0.5, this.top + 1, px + 0.5, this.top + 4)) { this.want = s; break; }
+      }
+    }
+    const dir = sign(dx) || this.dir;
+    if (lit && dir !== this.dir) { this.dir = dir; this.len = 0; }
+    this.len = this.want > this.len ? Math.min(this.want, this.len + 4) : Math.max(this.want, this.len - 5);
+  }
+  drawStone(ctx, cx, cy) { drawTile(ctx, 'marker', Math.round(this.x - 8 - cx), Math.round(this.y - 32 - cy)); }
+  drawShadow(ctx, cx, cy, t) {
+    if (this.len < 2) return;
+    const x0 = Math.round((this.dir > 0 ? this.x + 4 : this.x - 4 - this.len) - cx), y = Math.round(this.top - cy);
+    const w = Math.round(this.len);
+    ctx.fillStyle = 'rgba(34,18,62,0.95)'; ctx.fillRect(x0, y, w, 6);
+    ctx.fillStyle = '#6a58b8'; ctx.fillRect(x0, y + 1, w, 1);
+    ctx.fillStyle = '#b8a8ff'; ctx.fillRect(x0, y, w, 1);
+    // a faint shimmer runs along it
+    const sx = x0 + ((t * 2) % Math.max(1, w));
+    ctx.fillStyle = '#e8e0ff'; ctx.fillRect(sx, y, 3, 1);
+    // the far end frays like smoke
+    const tip = this.dir > 0 ? x0 + w : x0;
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = `rgba(26,14,48,${0.6 - i * 0.14})`;
+      ctx.fillRect(tip + this.dir * (i * 2) - (this.dir > 0 ? 0 : 2), y + 1 + ((t >> 3) + i) % 3, 2, 3);
+    }
+  }
+}
+
+// A wall of morning fog on the hill: it will not let anyone through until sunrise.
+class Mist {
+  constructor(e) { this.x = e.x; this.y = e.y; this.k = 1; this.t = 0; }
+  solidBox() { return this.k > 0.5 ? { x0: this.x - 12, x1: this.x + 12, y0: this.y - 200, y1: this.y } : null; }
+  update(game) { this.t++; if (game.dawnDone) this.k = Math.max(0, this.k - 0.01); }
+  draw(ctx, cx, cy) {
+    if (this.k <= 0) return;
+    for (let i = 0; i < 24; i++) {
+      const x = this.x - cx + Math.sin(this.t * 0.02 + i * 1.3) * 18 + ((i * 7) % 3 - 1) * 10, y = this.y - cy - (i % 12) * 12 - 6;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, 26);
+      g.addColorStop(0, `rgba(210,206,230,${0.5 * this.k})`); g.addColorStop(1, 'rgba(210,206,230,0)');
+      ctx.fillStyle = g; ctx.fillRect(x - 26, y - 26, 52, 52);
+    }
+  }
+}
+
+// The end of a chapter out of doors: a lookout where the two stop and watch.
+class Lookout {
+  constructor(e) { this.x = e.x; this.y = e.y; this.open = 1; }
+  draw() {}
+  light() { return { x: this.x, y: this.y - 30, r: 90, a: 0.6, col: 'rgba(255,210,160,0.12)' }; }
 }

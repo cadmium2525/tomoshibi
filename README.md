@@ -106,11 +106,12 @@ cd tools && python build_assets.py
 
 ## 次にやること
 
-- 第 2 章「薄明の森」の設計（`docs/STORY.md` の章構成を参照）
+- 第2章「薄明の森」の手直し（遊んでもらった感想から）。設計は `docs/CHAPTER2.md`
+- 第3章「消灯の街」の設計
 - 第1章をさらに区画ごとに作り込み、初見で15分前後に（今は 牢と回廊 → 縦穴 → 奈落の回廊 → 大階段 → 石像の間 → 脆き橋 → 光の橋 → 大広間 → 崩落からの逃走）
 - 収集要素の続き：第2章以降の「影絵の欠片」「灯守りの手記」の置き場所と文面、ポーズ画面から手記を読み返す機能
 
 ## テスト用
 
 - `python tools/devserver.py 8932` → `http://localhost:8932/?debug` で開くと `T.run(frames, keys)` などのデバッグ関数が使える
-- `tools/autoplay.js` を読み込んで `autoplay()` を実行すると、スタートからクリアまで自動でプレイして検証する
+- `tools/autoplay.js` を読み込んで `autoplay()` を実行すると、第1章をスタートからクリアまで自動でプレイして検証する（第2章は `tools/autoplay2.js` の `autoplay2()`）

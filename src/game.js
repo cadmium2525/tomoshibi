@@ -82,6 +82,8 @@ class Game {
     this.signs = []; this.ambushes = []; this.door = null; this.shadows = []; this.portals = []; this.npcs = [];
     this.crumbles = []; this.bridges = []; this.rocks = []; this.exitDoor = null; this.escapeSpot = null; this.items = [];
     this.escape = false; this.collapse = null; this.pendingFall = false;
+    this.markers = []; this.doorways = []; this.mist = null; this.dawnZone = null; this.dawn = null;
+    this.dawnDone = false; this.sun = 0;
     for (const e of stage.ents) {
       switch (e.type) {
         case 'hero': this.hero = new Hero(e.x, e.y); break;
@@ -100,16 +102,23 @@ class Game {
         case 'rock': this.rocks.push(new Rock(e)); break;
         case 'escape': this.escapeSpot = { id: e.id, x: e.x, y: e.y, escape: true }; break;
         case 'exit': this.exitDoor = new Door(e); this.exitDoor.open = 1; this.exitDoor.opening = true; break;
+        case 'lookout': this.exitDoor = new Lookout(e); this.exitDoor.walk = true; break;
+        case 'marker': this.markers.push(new Marker(e)); break;
+        case 'doorway': { const d = new Door(e); d.open = 1; d.opening = true; d.dark = true; this.doorways.push(d); break; }
+        case 'mist': this.mist = new Mist(e); break;
+        case 'dawn': this.dawnZone = { x0: e.x, x1: (e.x1 + 1) * TILE, y: e.y }; break;
       }
     }
     for (const g of this.gates) g.plates = this.plates.filter((p) => p.gateIds.includes(g.id));
     for (const b of this.bridges) b.plates = this.plates.filter((p) => p.gateIds.includes(b.id));
-    this.world.dyn = [...this.gates, ...this.blocks, ...this.crumbles, ...this.bridges, ...this.rocks];
+    this.world.dyn = [...this.gates, ...this.blocks, ...this.crumbles, ...this.bridges, ...this.rocks, ...this.markers];
+    if (this.mist) this.world.dyn.push(this.mist);
     if (cp) {
       for (const l of this.levers) if (cp.levers.includes(l.id)) { l.on = true; }
       for (const g of this.gates) if (this.levers.some((l) => l.on && l.gateIds.includes(g.id))) { g.locked = true; g.open = 1; }
       for (const s of this.shrines) if (cp.shrines.includes(s.id)) s.lit = true;
       for (const a of this.ambushes) if (cp.ambush.includes(a.id)) { a.done = true; a.wave = a.waves.length; }
+      if (cp.dawn) { this.dawnDone = true; this.sun = 1; if (this.mist) this.mist.k = 0; }
       for (const b of this.blocks) { const p = cp.blocks[b.id]; if (p) { b.x = p.x; b.y = p.y; } }
       if (cp.x !== undefined) {
         this.hero.x = cp.x + 12; this.hero.y = cp.y; this.hero.facing = 1;
@@ -131,7 +140,7 @@ class Game {
 
   saveCheckpoint(shrine) {
     this.checkpoint = {
-      x: shrine.x, y: shrine.y, escape: !!shrine.escape,
+      x: shrine.x, y: shrine.y, escape: !!shrine.escape, dawn: this.dawnDone,
       levers: this.levers.filter((l) => l.on).map((l) => l.id),
       shrines: this.shrines.filter((s) => s.lit).map((s) => s.id),
       ambush: this.ambushes.filter((a) => a.done).map((a) => a.id),
@@ -145,7 +154,7 @@ class Game {
   progressSnapshot() {
     const cp = this.checkpoint || {};
     return {
-      x: cp.x, y: cp.y, escape: cp.escape,
+      x: cp.x, y: cp.y, escape: cp.escape, dawn: this.dawnDone,
       levers: this.levers.filter((l) => l.on).map((l) => l.id),
       shrines: this.shrines.filter((s) => s.lit).map((s) => s.id),
       ambush: this.ambushes.filter((a) => a.done).map((a) => a.id),
@@ -273,6 +282,7 @@ class Game {
     if (this.hitstop > 0) { this.hitstop--; return; }
     this.t++; this.stats.time++;
     if (this.black > 0) this.black = Math.max(0, this.black - 0.04);    // fading back in after a fall
+    if (this.fade > 0) this.fade = Math.max(0, this.fade - 0.01);
     const hero = this.hero, h = this.heroine;
 
     if (Input.pressed('call') && hero.state !== 'fallout' && !this.escape) this.call();
@@ -283,6 +293,10 @@ class Game {
     for (const c of this.crumbles) c.update(this);
     for (const r of this.rocks) r.update(this);
     for (const it of this.items) it.update(this);
+    for (const m of this.markers) m.update(this);
+    if (this.mist) this.mist.update(this);
+    this.updateDawn();
+    if (this.updateLookout()) return;
     for (const p of this.plates) p.update(this);
     for (const b of this.bridges) b.update(this);
     for (const g of this.gates) g.update(this);
@@ -829,6 +843,57 @@ class Game {
     this.cut = new Cutscene(this, collapseScript(retry), () => this.beginEscape(first));
   }
 
+  // ---- the hill at dawn: hold out until the sun is up --------------------------------
+  updateDawn() {
+    const z = this.dawnZone;
+    if (!z || this.dawnDone) return;
+    const hero = this.hero, h = this.heroine;
+    if (!this.dawn) {
+      if (hero.x >= z.x0 && Math.abs(hero.y - z.y) < 48) {
+        this.dawn = { t: 0, dur: 2700, spawnT: 90 };
+        this.notify('dawn_start', 220);
+        h.emote('!', 60);
+      } else if (this.mist && Math.abs(hero.x - this.mist.x) < 30 && !this.flags.mistMsg) {
+        this.flags.mistMsg = true; this.notify('mist', 160);
+      }
+      return;
+    }
+    const D = this.dawn;
+    D.t++;
+    this.sun = D.t / D.dur;
+    const alive = this.shadows.filter((s) => s.alive).length;
+    // they come less often as the light grows
+    if (--D.spawnT <= 0 && alive < 3 && h.state !== 'carried') {
+      if (this.spawnNear(h)) Sfx.play('emerge');
+      D.spawnT = Math.round(130 + 170 * this.sun);
+    }
+    if (D.t % 60 === 0 && this.sun < 1) Sfx.play('heart');
+    if (D.t >= D.dur) {
+      this.dawnDone = true; this.sun = 1; this.dawn = null;
+      for (const s of this.shadows) {
+        if (!s.alive || s.state === 'die') continue;
+        s.state = 'seek'; s.hp = 1; s.hit(this, 1);
+      }
+      this.notify('dawn_end', 220);
+      Sfx.play('clear');
+      this.fade = 0.6;
+    }
+  }
+
+  // outdoors the chapter ends at a lookout: both of them standing there
+  updateLookout() {
+    const d = this.exitDoor, hero = this.hero, h = this.heroine;
+    if (!d || !d.walk || this.escape) return false;
+    if (hero.onGround && Math.abs(hero.x - d.x) < 20 && Math.abs(hero.y - d.y) < 8 &&
+        Math.abs(h.x - d.x) < 60 && h.state === 'normal') {
+      this.state = 'ending'; this.et = 0;
+      hero.setState('scripted'); h.setState('scripted');
+      Sfx.stopBgm(); Sfx.play('clear');
+      return true;
+    }
+    return false;
+  }
+
   // ---- the collapse: run for the exit hand in hand ---------------------------------
   placeAtEscape() {
     const e = this.escapeSpot, hero = this.hero, h = this.heroine;
@@ -1042,11 +1107,14 @@ class Game {
     const sy = this.shake > 0 ? Math.round(rand(-this.shake, this.shake)) : 0;
     const cx = Math.round(this.cam.x) + sx, cy = Math.round(this.cam.y) + sy;
     const w = this.world, T = this.t;
-    w.drawParallax(ctx, cx, cy);
+    w.drawParallax(ctx, cx, cy, this.sun);
     w.drawBack(ctx, cx, cy);
     w.drawDecor(ctx, cx, cy, T);
     this.drawWindowBeams(ctx, cx, cy);
     if (this.door) this.door.draw(ctx, cx, cy, T);
+    for (const d of this.doorways) d.draw(ctx, cx, cy, T);
+    for (const m of this.markers) m.drawStone(ctx, cx, cy);
+    for (const m of this.markers) m.drawShadow(ctx, cx, cy, T);
     for (const s of this.signs) s.draw(ctx, cx, cy);
     for (const s of this.shrines) s.draw(ctx, cx, cy);
     for (const l of this.levers) l.draw(ctx, cx, cy);
@@ -1078,6 +1146,7 @@ class Game {
     if (h.state === 'hand') this.drawHands(ctx, cx, cy);
     this.particles.draw(ctx, cx, cy);
     if (this.collapse) this.collapse.draw(ctx, cx, cy);
+    if (this.mist) this.mist.draw(ctx, cx, cy);
 
     // bottomless pits fade to black
     const g = ctx.createLinearGradient(0, w.ph - 110 - cy, 0, w.ph - 20 - cy);
@@ -1144,6 +1213,7 @@ class Game {
     if (this.door) L.push(this.door.light());
     for (const n of this.npcs) { const l = n.light(); if (l) L.push(l); }
     for (const b of this.bridges) { const l = b.light(); if (l) L.push(l); }
+    for (const m of this.markers) if (m.len > 8) L.push({ x: m.x + m.dir * (4 + m.len / 2), y: m.top, r: 14 + m.len * 0.35, a: 0.5, col: 'rgba(140,110,255,0.08)' });
     for (const it of this.items) L.push(it.light());
     if (this.exitDoor) L.push(this.exitDoor.light());
     return L;
@@ -1153,7 +1223,8 @@ class Game {
     const lc = this.lctx;
     lc.globalCompositeOperation = 'source-over';
     lc.clearRect(0, 0, VW, VH);
-    lc.fillStyle = 'rgba(5,3,14,0.64)';
+    // the forest is lighter than the cathedral, and lighter still as the sun comes up
+    lc.fillStyle = this.world.theme === 'forest' ? `rgba(8,6,24,${0.46 * (1 - 0.85 * this.sun)})` : 'rgba(5,3,14,0.64)';
     lc.fillRect(0, 0, VW, VH);
     lc.globalCompositeOperation = 'destination-out';
     const L = this.lights();

@@ -33,7 +33,7 @@ class World {
     const b = { x0, y0, x1, y1 };
     for (const d of this.dyn) {
       if (d === self) continue;
-      const s = d.solidBox();
+      const s = d.solidBox(self);
       if (s && overlap(b, s)) return d;
     }
     return null;
@@ -66,7 +66,8 @@ class World {
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       if (this.solid[y * W + x] || this.noBg[y * W + x]) continue;
       const r = this.hash(x, y);
-      const name = r < 0.06 ? 'bg4' : r < 0.12 ? 'bg5' : 'bg' + Math.floor(r * 4);
+      const name = this.theme === 'forest' ? 'eback' + Math.floor(r * 4)
+        : r < 0.06 ? 'bg4' : r < 0.12 ? 'bg5' : 'bg' + Math.floor(r * 4);
       drawTile(g, name, x * TILE, y * TILE);
     }
     // soft shadow under ceilings / beside walls on the back wall
@@ -85,20 +86,23 @@ class World {
       if (!this.solid[y * W + x]) continue;
       const d = depth[y * W + x];
       const px = x * TILE, py = y * TILE;
-      if (d >= 3) { g.fillStyle = '#0d0b16'; g.fillRect(px, py, TILE, TILE); continue; }
+      if (d >= 3) { g.fillStyle = this.theme === 'forest' ? '#1a1014' : '#0d0b16'; g.fillRect(px, py, TILE, TILE); continue; }
       const r = this.hash(x + 999, y);
-      const name = r < 0.08 ? 'fg4' : r < 0.14 ? 'fg5' : 'fg' + Math.floor(r * 4);
+      const forest = this.theme === 'forest';
+      const name = forest ? 'dirt' + Math.floor(r * 6) : r < 0.08 ? 'fg4' : r < 0.14 ? 'fg5' : 'fg' + Math.floor(r * 4);
       drawTile(g, name, px, py);
-      if (d === 2) { g.fillStyle = 'rgba(10,8,18,0.72)'; g.fillRect(px, py, TILE, TILE); }
+      if (d === 2) { g.fillStyle = forest ? 'rgba(14,8,10,0.6)' : 'rgba(10,8,18,0.72)'; g.fillRect(px, py, TILE, TILE); }
       const open = (dx, dy) => !this.tile(x + dx, y + dy) && y + dy < H;
-      if (open(0, -1)) drawTile(g, 'top' + Math.floor(this.hash(x, y + 7) * 4), px, py);
-      if (open(-1, 0)) { g.fillStyle = '#1e1a28'; g.fillRect(px, py, 1, TILE); g.fillStyle = '#9890a8'; g.fillRect(px + 1, py + (open(0, -1) ? 2 : 0), 1, TILE - (open(0, -1) ? 2 : 0)); }
-      if (open(1, 0)) { g.fillStyle = '#1e1a28'; g.fillRect(px + 15, py, 1, TILE); g.fillStyle = '#3a3448'; g.fillRect(px + 14, py, 1, TILE); }
-      if (open(0, 1)) { g.fillStyle = '#1e1a28'; g.fillRect(px, py + 15, TILE, 1); g.fillStyle = '#403a50'; g.fillRect(px, py + 14, TILE, 1); }
+      const E = forest ? ['#1a1014', '#8a6448', '#3a2622', '#4a3228'] : ['#1e1a28', '#9890a8', '#3a3448', '#403a50'];
+      if (open(0, -1)) drawTile(g, (forest ? 'grass' : 'top') + Math.floor(this.hash(x, y + 7) * 4), px, py);
+      if (open(-1, 0)) { g.fillStyle = E[0]; g.fillRect(px, py, 1, TILE); g.fillStyle = E[1]; g.fillRect(px + 1, py + (open(0, -1) ? 2 : 0), 1, TILE - (open(0, -1) ? 2 : 0)); }
+      if (open(1, 0)) { g.fillStyle = E[0]; g.fillRect(px + 15, py, 1, TILE); g.fillStyle = E[2]; g.fillRect(px + 14, py, 1, TILE); }
+      if (open(0, 1)) { g.fillStyle = E[0]; g.fillRect(px, py + 15, TILE, 1); g.fillStyle = E[3]; g.fillRect(px, py + 14, TILE, 1); }
     }
   }
 
-  drawParallax(ctx, cx, cy) {
+  drawParallax(ctx, cx, cy, sun = 0) {
+    if (this.theme === 'forest') { this.drawSky(ctx, cx, cy, sun); return; }
     const far = Sheets.bgfar.img, mid = Sheets.bgmid.img;
     const layer = (img, fx, fy, oy) => {
       const w = img.width, h = img.height;
@@ -109,6 +113,27 @@ class World {
     ctx.fillStyle = '#0e0c1a'; ctx.fillRect(0, 0, VW, VH);
     layer(far, 0.15, 0.1, 0);
     layer(mid, 0.4, 0.3, 40);
+  }
+
+  // dawn sky: a fixed gradient, hills and a tree line that scroll (not repeated vertically)
+  drawSky(ctx, cx, cy, sun) {
+    ctx.drawImage(Sheets.sky2.img, 0, 0, 1, Sheets.sky2.img.height, 0, 0, VW, VH);
+    if (sun > 0) {                  // morning: the sky turns pale blue above and gold at the horizon
+      const g = ctx.createLinearGradient(0, 0, 0, VH);
+      g.addColorStop(0, `rgba(120,160,220,${0.9 * sun})`); g.addColorStop(0.6, `rgba(230,190,190,${0.9 * sun})`);
+      g.addColorStop(1, `rgba(255,214,150,${sun})`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
+    }
+    const band = (img, fx, fy, base) => {
+      const w = img.width;
+      let ox = -Math.round(cx * fx) % w; if (ox > 0) ox -= w;
+      const oy = Math.round(base + VH - img.height - (cy - 270) * fy);     // ~270 = camera at ground level
+      for (let x = ox; x < VW; x += w) ctx.drawImage(img, x, oy);
+      const last = oy + img.height;
+      if (last < VH) { ctx.fillStyle = img === Sheets.trees2.img ? '#181628' : '#262240'; ctx.fillRect(0, last, VW, VH - last); }
+    };
+    band(Sheets.hills2.img, 0.08, 0.05, 0);
+    band(Sheets.trees2.img, 0.3, 0.2, 20);
   }
 
   drawBack(ctx, cx, cy) {
@@ -141,6 +166,16 @@ class World {
         case 'bed': case 'drawings':
           drawTile(ctx, d.type, x, y);
           break;
+        // forest: things standing on the ground (d.y = the ground line)
+        case 'tree': case 'tree_s': {
+          const r = Sheets.tiles.f[d.type];
+          drawTile(ctx, d.type, x - r[2] / 2 + 8, y - r[3]);
+          break;
+        }
+        case 'bush': drawTile(ctx, 'bush' + (d.v || 0), x - 8, y - 16); break;
+        case 'fern': drawTile(ctx, 'fern', x, y - 16); break;
+        case 'flower': drawTile(ctx, 'flower' + (d.v || 0), x + 4, y - 8); break;
+        case 'stump': drawTile(ctx, 'stump', x - 8, y - 16); break;
         case 'candle': {
           drawTile(ctx, 'candle', x, y);
           const f = Math.floor(t / 7 + d.x) % 3;
