@@ -58,7 +58,7 @@ class Hero extends Body {
         } else if (this.onGround && I.down('down') && !dir) {
           this.state = 'reach'; this.t = 0; this.vx = 0;
         } else if (I.pressed('up')) {
-          if (!game.tryLever(this)) game.tryLift(this);
+          if (!game.tryLever(this) && !game.tryLift(this)) game.tryHood(this);
         }
         break;
       }
@@ -280,6 +280,7 @@ class Heroine extends Body {
     this.mode = 'follow'; this.state = 'normal'; this.t = 0;
     this.animDist = 0; this.anim = 'idle'; this.icon = null; this.iconT = 0;
     this.carriedBy = null; this.stuckT = 0; this.flash = 0;
+    this.hooded = false;        // chapter 3: Grey's coat hides her light
   }
   setState(s) { this.state = s; this.t = 0; }
   grabbable() { return (this.state === 'normal' || this.state === 'down' || this.state === 'getup') && this.onGround; }
@@ -456,7 +457,7 @@ class Heroine extends Body {
     }
     if (want) {
       const res = this.probe(w, want);
-      const speed = adx > 72 || Math.abs(dy) > 60 ? 2.0 : 1.05;
+      const speed = (adx > 72 || Math.abs(dy) > 60 ? 2.0 : 1.05) * (this.hooded ? 0.75 : 1);
       this.facing = want;
       switch (res) {
         case 'clear': this.vx = approach(this.vx, want * speed, 0.12); this.stuckT = 0; break;
@@ -525,6 +526,11 @@ class Heroine extends Body {
   draw(ctx, cx, cy) {
     const x = this.x - cx, y = this.y - cy;
     drawSprite(ctx, 'heroine', this.frame(), x, y, this.facing < 0, this.flash > 0 && (this.flash >> 1) % 2 ? { white: true } : null);
+    if (this.hooded && this.state !== 'carried') {
+      // Grey's coat over her head and shoulders; a little light leaks out at the hem
+      drawSprite(ctx, 'heroine', this.frame(), x, y, this.facing < 0, { cloak: true, clipBottom: y - 7, alpha: 0.94 });
+      if ((this.t >> 3) % 3 === 0) { ctx.fillStyle = '#ffe9a8'; ctx.fillRect(Math.round(x) - 1, Math.round(y) - 8, 2, 1); }
+    }
   }
   drawIcon(ctx, cx, cy) {
     if (this.iconT > 0 && this.state !== 'carried') {
@@ -797,5 +803,157 @@ class FlyShadow extends Shadow {
       }
     }
     super.draw(ctx, cx, cy);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 消灯番: town guard. Patrols (or stands watch), sees Lumina's light inside a
+// cone in front of him, and takes her away if he catches her. Grey does not
+// fight people: his pole only shoves a guard back and dazes him for a moment.
+class Guard extends Body {
+  constructor(e) {
+    super(e.x, e.y, 6, 44);
+    this.home = { x: e.x, y: e.y };
+    this.x0 = e.x0 !== undefined ? e.x0 * TILE + 8 : null; this.x1 = e.x1 !== undefined ? e.x1 * TILE + 8 : null;
+    this.facing = e.dir || -1; this.baseFacing = this.facing;
+    this.turnEvery = e.turn || 0;           // a stationary guard who looks the other way now and then
+    this.state = 'patrol'; this.t = 0; this.animDist = 0; this.unseen = 0; this.lamp = null; this.range = e.range || 112;
+    this.id = e.id;
+  }
+  setState(s) { this.state = s; this.t = 0; }
+  eye() { return { x: this.x + this.facing * 4, y: this.y - 40 }; }
+  // does he see her right now?
+  sees(game) {
+    const h = game.heroine, w = game.world;
+    if (h.state === 'carried') return false;
+    const e = this.eye(), dx = h.x - this.x, dy = (h.y - 18) - e.y;
+    if (h.hooded) {
+      // under the coat: only noticed walking right into his face (never in a nook)
+      if (game.inNook(h)) return false;
+      // (slipping past behind him and walking on the way he looks is fine)
+      const closing = (Math.abs(h.vx) > 0.05 && sign(h.vx) === -this.facing) || (Math.abs(this.vx) > 0.05 && sign(this.vx) === this.facing);
+      return Math.abs(dx) < 16 && dx * this.facing > 0 && closing && Math.abs(h.y - this.y) < 20;
+    }
+    if (dx * this.facing < 2 || Math.abs(dx) > this.range) return false;
+    if (Math.abs(dy) > Math.abs(dx) * 0.55 + 22) return false;                  // outside the cone
+    const n = Math.ceil(Math.hypot(dx, dy) / 6);
+    for (let i = 1; i < n; i++) {
+      const px = e.x + (h.x - e.x) * i / n, py = e.y + (h.y - 18 - e.y) * i / n;
+      if (w.tileAt(px, py)) return false;
+      for (const g of game.gates) { const b = g.solidBox(); if (b && px > b.x0 && px < b.x1 && py > b.y0 && py < b.y1) return false; }
+    }
+    return true;
+  }
+  walkTo(game, tx, speed) {
+    const dx = tx - this.x;
+    if (Math.abs(dx) < 2) { this.vx = 0; return true; }
+    this.facing = sign(dx);
+    const w = game.world, fx = this.x + this.facing * (this.hw + 2);
+    // guards keep to the ground: no leaps into pits, one-tile steps are fine
+    if (!w.pointSolid(fx, this.y + 2) && !w.pointSolid(fx, this.y + 18)) { this.vx = 0; return true; }
+    this.vx = approach(this.vx, this.facing * speed, 0.1);
+    if (this.onGround && w.pointSolid(fx, this.y - 4) && !w.pointSolid(fx, this.y - 20)) this.vy = -3.6;
+    return false;
+  }
+  update(game) {
+    this.t++;
+    const h = game.heroine;
+    const seen = this.sees(game);
+    switch (this.state) {
+      case 'patrol':
+        if (this.x0 !== null) {
+          const tx = this.facing > 0 ? this.x1 : this.x0;
+          if (this.walkTo(game, tx, 0.45)) { this.facing = -this.facing; this.setState('look'); }
+        } else {
+          this.vx = 0;
+          if (this.turnEvery && this.t % this.turnEvery === 0) this.facing = -this.facing;
+        }
+        if (seen) { this.setState('alert'); Sfx.play('grab'); }
+        else this.checkLamps(game);
+        break;
+      case 'look':                              // a pause at the end of the beat
+        this.vx = 0;
+        if (this.t === 30) this.facing = -this.facing;
+        if (this.t === 60) this.facing = -this.facing;
+        if (seen) { this.setState('alert'); Sfx.play('grab'); }
+        else if (this.t > 80) this.setState('patrol');
+        break;
+      case 'alert':
+        this.vx = 0; this.facing = sign(h.x - this.x) || this.facing;
+        if (this.t >= 40) { if (seen || this.t < 60) this.setState('chase'); else this.setState('lost'); }
+        break;
+      case 'chase':
+        this.unseen = seen ? 0 : this.unseen + 1;
+        this.walkTo(game, h.x, 1.65);
+        if (Math.abs(h.x - this.x) < 12 && Math.abs(h.y - this.y) < 26 && h.state !== 'carried') { game.gameOver('guard'); return; }
+        if (this.unseen > 100 || h.hooded && this.unseen > 30) this.setState('lost');
+        break;
+      case 'lost':
+        this.vx = 0;
+        if (this.t === 25 || this.t === 50) this.facing = -this.facing;
+        if (seen) this.setState('alert');
+        else if (this.t > 70) this.setState('return');
+        break;
+      case 'return': {
+        const back = this.x0 !== null ? clamp(this.x, this.x0, this.x1) : this.home.x;
+        if (this.walkTo(game, back, 0.6)) { this.facing = this.baseFacing; this.setState('patrol'); }
+        if (seen) this.setState('alert');
+        break;
+      }
+      case 'investigate': {                     // walks over to put out a lamp someone lit
+        const L = this.lamp;
+        if (!L.lit) { this.lamp = null; this.setState('return'); break; }
+        if (this.walkTo(game, L.x - sign(L.x - this.home.x || 1) * 10, 0.7)) { this.facing = sign(L.x - this.x) || this.facing; this.setState('snuff'); }
+        if (seen) this.setState('alert');
+        break;
+      }
+      case 'snuff':
+        this.vx = 0;
+        if (this.t === 300) { this.lamp.lit = false; this.lamp.by = null; this.lamp = null; Sfx.play('plateoff'); this.setState('return'); }
+        if (seen) this.setState('alert');
+        break;
+      case 'stun':
+        this.vx = approach(this.vx, 0, 0.1);
+        if (this.t > 50) this.setState(seen ? 'alert' : 'return');
+        break;
+    }
+    this.physics(game.world);
+    if (this.onGround) this.animDist += Math.abs(this.vx);
+  }
+  checkLamps(game) {
+    for (const L of game.lamps) {
+      if (!L.lit || L.by || L.guard !== this.id) continue;      // each lamp is watched by one guard
+      { L.by = this; this.lamp = L; this.setState('investigate'); game.say(this, '……誰だ、灯りを つけたのは', 'hero', 90); return; }
+    }
+  }
+  // Grey's pole: a shove, never a blow
+  bump(game, dir) {
+    if (this.state === 'stun') return false;
+    this.vx = dir * 2.4; this.vy = -1.5; this.setState('stun');
+    Sfx.play('hit'); game.say(this, 'うおっ…！', 'hero', 50);
+    return true;
+  }
+  frame() {
+    switch (this.state) {
+      case 'alert': return 'alert' + (this.t < 20 ? 0 : 1);
+      case 'chase': return 'run' + (Math.floor(this.animDist / 6) % 6);
+      case 'look': case 'lost': case 'snuff': case 'stun': return 'idle' + (Math.floor(this.t / 15) % 4);
+    }
+    if (Math.abs(this.vx) > 0.1) return 'walk' + (Math.floor(this.animDist / 3) % 9);
+    return 'idle' + (Math.floor(this.t / 20) % 4);
+  }
+  drawCone(ctx, cx, cy) {
+    if (this.state === 'stun') return;
+    const e = this.eye(), x = e.x - cx, y = e.y - cy, r = this.range, f = this.facing;
+    const hot = this.state === 'alert' || this.state === 'chase';
+    ctx.fillStyle = hot ? 'rgba(255,140,80,0.16)' : 'rgba(210,220,255,0.07)';
+    ctx.beginPath(); ctx.moveTo(x, y);
+    ctx.lineTo(x + f * r, y - r * 0.55 - 22); ctx.lineTo(x + f * r, y + r * 0.55 + 22); ctx.closePath(); ctx.fill();
+  }
+  draw(ctx, cx, cy) {
+    const x = this.x - cx, y = this.y - cy;
+    drawSprite(ctx, 'guard', this.frame(), x, y, this.facing < 0);
+    const icon = this.state === 'alert' || this.state === 'chase' ? '!' : this.state === 'lost' ? '?' : null;
+    if (icon) drawIcon(ctx, icon, x, y - 48, icon === '!' ? '#d02030' : '#303060');
   }
 }

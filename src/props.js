@@ -47,7 +47,7 @@ class Plate {
   update(game) {
     const h = game.heroine;
     let p = false;
-    if (h.onGround && ['normal', 'getup', 'down'].includes(h.state) && Math.abs(h.x - this.x) <= 11 && Math.abs(h.y - this.y) <= 2) p = true;
+    if (h.onGround && !h.hooded && ['normal', 'getup', 'down'].includes(h.state) && Math.abs(h.x - this.x) <= 11 && Math.abs(h.y - this.y) <= 2) p = true;
     for (const b of game.blocks) if (!b.hidden && !b.carried && b.onGround && Math.abs(b.x - this.x) <= 10 && Math.abs(b.y - this.y) <= 2) p = true;
     if (p !== this.pressed) Sfx.play(p ? 'plate' : 'plateoff');
     this.pressed = p;
@@ -129,7 +129,7 @@ class Shrine {
     if (this.lit) return;
     const hero = game.hero, h = game.heroine;
     // her light kindles the lantern when she walks past it (with the hero close by)
-    if (Math.abs(h.x - this.x) < 20 && Math.abs(h.y - this.y) < 12 && h.state === 'normal' && Math.abs(hero.x - this.x) < 110 && Math.abs(hero.y - this.y) < 60) {
+    if (!h.hooded && Math.abs(h.x - this.x) < 20 && Math.abs(h.y - this.y) < 12 && h.state === 'normal' && Math.abs(hero.x - this.x) < 110 && Math.abs(hero.y - this.y) < 60) {
       this.lit = true;
       game.saveCheckpoint(this);
       Sfx.play('save');
@@ -235,7 +235,8 @@ class Ambush {
   spawnWave(game, i) {
     this.wave = i; this.delay = 0;
     for (const p of this.waves[i]) {
-      const s = game.spawnShadow(p.tx * TILE + 8, (p.ty + 1) * TILE);
+      const s = p.fly ? new FlyShadow(p.tx * TILE + 8, (p.ty + 1) * TILE - 110) : game.spawnShadow(p.tx * TILE + 8, (p.ty + 1) * TILE);
+      if (p.fly) game.shadows.push(s);
       s.wave = this;
     }
     game.say(game.heroine, 'いやっ…影が…！', 'cry', 70);
@@ -358,7 +359,7 @@ class Rock {
 
 // The cave-in chasing them: a wall of falling rubble that moves right.
 class Collapse {
-  constructor(x, floorY) { this.x = x; this.y = floorY; this.t = 0; this.speed = 0; }
+  constructor(x, floorY, style = 'rubble') { this.x = x; this.y = floorY; this.t = 0; this.speed = 0; this.style = style; }
   update(game) {
     this.t++;
     const hero = game.hero;
@@ -366,6 +367,10 @@ class Collapse {
     this.speed = Math.min(2.15, this.speed + 0.02);
     const gap = hero.x - this.x;
     this.x += this.speed + (gap > 230 ? 1.2 : 0);           // never falls hopelessly behind
+    if (this.style === 'guards') {                 // the whole watch, running with bells ringing
+      if (this.t % 50 === 0) Sfx.play('lever');
+      return;
+    }
     if (this.t % 12 === 0) game.shake = Math.max(game.shake, 2);
     if (this.t % 30 === 0) Sfx.play('block');
     if (this.t % 2 === 0) {
@@ -375,6 +380,16 @@ class Collapse {
   caught(a) { return a.x - a.hw < this.x - 2; }
   draw(ctx, cx, cy) {
     const x = Math.round(this.x - cx);
+    if (this.style === 'guards') {
+      // three guards running along the roofs just behind the front line
+      for (let i = 0; i < 3; i++) {
+        const gx = this.x - 6 - i * 22, g = game.world;
+        let gy = this.y;
+        for (let yy = game.hero.y - 90; yy < game.hero.y + 140; yy += 2) if (g.pointSolid(gx, yy)) { gy = yy; break; }
+        drawSprite(ctx, 'guard', 'run' + (Math.floor(this.t / 5 + i * 2) % 6), gx - cx, Math.round(gy) - cy, false);
+      }
+      return;
+    }
     if (x < -40) return;
     const g = ctx.createLinearGradient(x - 60, 0, x + 6, 0);
     g.addColorStop(0, 'rgba(6,4,12,1)'); g.addColorStop(0.8, 'rgba(20,16,26,0.95)'); g.addColorStop(1, 'rgba(40,34,48,0)');
@@ -396,7 +411,8 @@ class Collapse {
 // background (anyone walks past it).
 class Marker {
   constructor(e) {
-    this.id = e.id; this.x = e.x; this.y = e.y; this.top = e.y - 30;
+    this.id = e.id; this.x = e.x; this.y = e.y; this.top = e.y - (e.h || 30);
+    this.look = e.look || 'marker'; this.lampId = e.lamp || null;
     this.len = 0; this.dir = 1; this.want = 0;
   }
   solidBox(self) {
@@ -406,9 +422,16 @@ class Marker {
   }
   update(game) {
     const h = game.heroine;
-    const dx = this.x - h.x, d = Math.abs(dx);
-    const lit = ['normal', 'getup', 'hand', 'hop', 'scripted'].includes(h.state) && h.state !== 'carried' &&
-      Math.abs(h.y - this.y) < 40 && d > 6 && d < 150;
+    let src = h, lit;
+    if (this.lampId) {                     // lit by a street lamp instead of by her
+      const L = game.lamps.find((l) => l.id === this.lampId);
+      src = L.lightPos();
+      lit = L.lit;
+    } else {
+      lit = ['normal', 'getup', 'hand', 'hop', 'scripted'].includes(h.state) && !h.hooded && Math.abs(h.y - this.y) < 40;
+    }
+    const dx = this.x - src.x, d = Math.abs(dx);
+    lit = lit && d > 6 && d < 150;
     // the nearer the light, the longer the shadow (up to 8 tiles)
     this.want = lit ? clamp((150 - d) * 1.05, 0, 128) : 0;
     // a shadow stops where it meets rock
@@ -423,7 +446,10 @@ class Marker {
     if (lit && dir !== this.dir) { this.dir = dir; this.len = 0; }
     this.len = this.want > this.len ? Math.min(this.want, this.len + 4) : Math.max(this.want, this.len - 5);
   }
-  drawStone(ctx, cx, cy) { drawTile(ctx, 'marker', Math.round(this.x - 8 - cx), Math.round(this.y - 32 - cy)); }
+  drawStone(ctx, cx, cy) {
+    const r = Sheets.tiles.f[this.look];
+    drawTile(ctx, this.look, Math.round(this.x - r[2] / 2 - cx), Math.round(this.y - r[3] - cy));
+  }
   drawShadow(ctx, cx, cy, t) {
     if (this.len < 2) return;
     const x0 = Math.round((this.dir > 0 ? this.x + 4 : this.x - 4 - this.len) - cx), y = Math.round(this.top - cy);
@@ -481,4 +507,21 @@ class Lookout {
     drawIcon(ctx, '↓', x, y - 50 + Math.round(Math.sin(t * 0.15) * 2), '#c07020');
   }
   light() { return { x: this.x, y: this.y - 30, r: 90, a: 0.6, col: 'rgba(255,210,160,0.12)' }; }
+}
+
+// A street lamp, put out under the curfew. Lumina (not hooded) standing under
+// it lights it again; a guard nearby will come and put it out.
+class Lamp {
+  constructor(e) { this.id = e.id; this.x = e.x; this.y = e.y; this.lit = false; this.by = null; this.t = 0; this.guard = e.guard || null; }
+  update(game) {
+    this.t++;
+    const h = game.heroine;
+    if (!this.lit && !h.hooded && h.onGround && h.state === 'normal' && Math.abs(h.x - this.x) < 10 && Math.abs(h.y - this.y) < 4) {
+      this.lit = true; Sfx.play('save');
+      game.particles.burst(this.x, this.y - 42, 10, { col: '#ffe0a0', life: 24, max: 1 });
+    }
+  }
+  lightPos() { return { x: this.x, y: this.y - 42 }; }
+  draw(ctx, cx, cy) { drawTile(ctx, this.lit ? 'lamp_on' : 'lamp_off', Math.round(this.x - 8 - cx), Math.round(this.y - 48 - cy)); }
+  light() { return this.lit ? { x: this.x, y: this.y - 40, r: 80 + Math.sin(this.t * 0.2) * 2, a: 0.9, col: 'rgba(255,190,110,0.16)' } : null; }
 }

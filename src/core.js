@@ -212,7 +212,35 @@ function loadSheets() {
       Sheets[key].white = silhouette(Sheets[key].img, '#fff');
       Sheets[key].dark = silhouette(Sheets[key].img, '#0a0612');
     }
+    Sheets.heroine.cloak = cloakSheet(Sheets.heroine);
   });
+}
+
+// Grey's brown coat drawn over every frame of Lumina: hood, shading and a dark rim
+function cloakSheet(sh) {
+  const c = document.createElement('canvas');
+  c.width = sh.img.width; c.height = sh.img.height;
+  const x = c.getContext('2d');
+  x.drawImage(sh.img, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height), p = d.data, W = c.width;
+  const out = new Uint8ClampedArray(p.length);
+  const A = (i, j) => p[(j * W + i) * 4 + 3] > 0;
+  const put = (k, [r, g, b]) => { out[k] = r; out[k + 1] = g; out[k + 2] = b; out[k + 3] = 255; };
+  for (const name in sh.f) {
+    const [sx, sy, w, h] = sh.f[name];
+    for (let j = sy; j < sy + h; j++) for (let i = sx; i < sx + w; i++) {
+      if (!A(i, j)) continue;
+      const k = (j * W + i) * 4, ry = (j - sy) / h, rx = (i - sx) / w;
+      const edge = !(i > sx && A(i - 1, j)) || !(i < sx + w - 1 && A(i + 1, j)) || !(j > sy && A(i, j - 1)) || !(j < sy + h - 1 && A(i, j + 1));
+      if (edge) put(k, [30, 20, 14]);
+      else if (ry < 0.3) put(k, rx < 0.45 ? [120, 88, 62] : [96, 70, 50]);          // the hood
+      else if (ry < 0.33) put(k, [60, 42, 30]);                                     // its rim
+      else put(k, rx < 0.4 ? [104, 76, 54] : (i + j) % 7 === 0 ? [70, 50, 36] : [84, 60, 42]);
+    }
+  }
+  d.data.set(out);
+  x.putImageData(d, 0, 0);
+  return c;
 }
 
 function drawSprite(ctx, sheet, name, x, y, flip = false, opt = null) {
@@ -220,7 +248,7 @@ function drawSprite(ctx, sheet, name, x, y, flip = false, opt = null) {
   const r = s.f[name];
   if (!r) return;
   const [sx, sy, w, h, ax, ay] = r;
-  const img = opt && opt.white ? s.white : s.img;
+  const img = opt && opt.white ? s.white : opt && opt.cloak ? s.cloak : s.img;
   x = Math.round(x); y = Math.round(y);
   if (opt && opt.alpha !== undefined) ctx.globalAlpha = opt.alpha;
   let clipH = h;

@@ -84,6 +84,8 @@ class Game {
     this.escape = false; this.collapse = null; this.pendingFall = false;
     this.markers = []; this.doorways = []; this.mist = null; this.dawnZone = null; this.dawn = null;
     this.dawnDone = false; this.sun = 0;
+    this.guards = []; this.lamps = []; this.fear = 0; this.fearCd = 0; this.nooks = []; this.martaSpot = null; this.npcSpots = [];
+    this.darks = (stage.darks || []).map(([x0, y0, x1, y1]) => ({ x0: x0 * TILE, y0: y0 * TILE, x1: (x1 + 1) * TILE, y1: (y1 + 1) * TILE }));
     for (const e of stage.ents) {
       switch (e.type) {
         case 'hero': this.hero = new Hero(e.x, e.y); break;
@@ -104,6 +106,11 @@ class Game {
         case 'exit': this.exitDoor = new Door(e); this.exitDoor.open = 1; this.exitDoor.opening = true; break;
         case 'lookout': this.exitDoor = new Lookout(e); this.exitDoor.walk = true; break;
         case 'marker': this.markers.push(new Marker(e)); break;
+        case 'guard': this.guards.push(new Guard(e)); break;
+        case 'lamp': this.lamps.push(new Lamp(e)); break;
+        case 'nook': this.nooks.push({ x0: e.x - 8, x1: e.x - 8 + (e.w || 1) * TILE, y: e.y }); break;
+        case 'marta': this.martaSpot = { x: e.x, y: e.y, done: false }; break;
+        case 'npcspot': this.npcSpots.push(e); break;
         case 'doorway': { const d = new Door(e); d.open = 1; d.opening = true; d.dark = true; this.doorways.push(d); break; }
         case 'mist': this.mist = new Mist(e); break;
         case 'dawn': this.dawnZone = { x0: e.x, x1: (e.x1 + 1) * TILE, y: e.y }; break;
@@ -135,6 +142,7 @@ class Game {
     this.updateCamera(true);
     for (const el of this.bubbleEls.values()) el.el.remove();
     this.bubbleEls.clear();
+    if (C.startHooded && !cp) this.heroine.hooded = true;
     if (cp && cp.escape) this.startEscapeCut(true);
   }
 
@@ -260,6 +268,7 @@ class Game {
         if (this.stGo === 70) {
           const [t1, t2] = this.goReason === 'fall'
             ? ['ルミナは 奈落へ 落ちてしまった…', 'あなたは 彼女を 守れなかった']
+            : this.goReason === 'guard' ? ['ルミナは 消灯番に 連れて行かれた…', 'あなたは 彼女の光を 隠しきれなかった']
             : ['ルミナは 闇に連れ去られた…', 'あなたは 彼女の手を 離してしまった'];
           this.showCenter(`<h1 style="color:#d8c8ff">${t1}</h1><h2>${t2}</h2><div class="blink">${Touch.enabled ? 'タップで' : 'Z：'}最後の灯籠から やり直す</div>`, true);
         }
@@ -293,9 +302,13 @@ class Game {
     for (const c of this.crumbles) c.update(this);
     for (const r of this.rocks) r.update(this);
     for (const it of this.items) it.update(this);
+    for (const L of this.lamps) L.update(this);
     for (const m of this.markers) m.update(this);
+    for (const gd of this.guards) { gd.update(this); if (this.state !== 'play') return; }
+    this.updateFear();
     if (this.mist) this.mist.update(this);
     this.updateDawn();
+    if (this.updateMarta()) return;
     if (this.updateLookout()) return;
     for (const p of this.plates) p.update(this);
     for (const b of this.bridges) b.update(this);
@@ -352,6 +365,7 @@ class Game {
     const hero = this.hero, h = this.heroine, p = this.startPos;
     hero.setState('normal'); hero.pose = null; hero.kinematic = false; hero.front = false;
     h.setState('normal'); h.pose = null; h.mode = 'follow';
+    if (CHAPTERS[this.chapter].startHooded) h.hooded = true;
     hero.x = p.hx; hero.y = p.hy; h.x = p.yx; h.y = p.yy; hero.facing = h.facing = 1;
     hero.vx = hero.vy = h.vx = h.vy = 0;
     hero.checkGround(this.world); h.checkGround(this.world);
@@ -490,6 +504,9 @@ class Game {
     if (Math.abs(dx) < 1.2) { a.vx = 0; return true; }
     a.facing = sign(dx);
     a.vx = sign(dx) * Math.min(speed, Math.abs(dx));
+    // hop up a single step on the way (scripted walks have no other way over it)
+    const fx = a.x + a.facing * (a.hw + 2);
+    if (a.onGround && this.world.pointSolid(fx, a.y - 4) && !this.world.pointSolid(fx, a.y - 20)) a.vy = -3.9;
     return false;
   }
 
@@ -597,6 +614,33 @@ class Game {
       <b>灯守りの手記</b>${this.countFound(PAGES)} / ${Object.keys(PAGES).length}`;
   }
 
+  // ↑ next to Lumina: put Grey's coat over her (or take it off) - chapters with CHAPTERS[n].hood
+  tryHood(hero) {
+    const h = this.heroine;
+    if (!CHAPTERS[this.chapter].hood || h.state !== 'normal') return false;
+    if (Math.abs(h.x - hero.x) > 26 || Math.abs(h.y - hero.y) > 12) return false;
+    h.hooded = !h.hooded;
+    Sfx.play(h.hooded ? 'plateoff' : 'save');
+    this.particles.burst(h.x, h.y - 20, 8, { col: h.hooded ? '#5a5468' : '#ffe9a8', life: 18, max: 1 });
+    if (h.hooded && !this.flags.hoodMsg) { this.flags.hoodMsg = true; this.say(h, '……くらい。 でも、あったかい。', 'her', 100); }
+    return true;
+  }
+
+  inNook(h) { return this.nooks.some((n) => h.x >= n.x0 && h.x <= n.x1 && Math.abs(h.y - n.y) < 4); }
+
+  // hidden under the coat she is alone in the dark again: her fear draws the shadows
+  updateFear() {
+    const h = this.heroine;
+    if (!CHAPTERS[this.chapter].hood) return;
+    if (h.hooded && h.state === 'normal') this.fear = Math.min(1, this.fear + 1 / 2400);
+    else this.fear = Math.max(0, this.fear - 1 / 240);
+    if (this.fearCd > 0) this.fearCd--;
+    if (this.fear >= 1 && this.fearCd <= 0 && this.shadows.filter((s) => s.alive).length < 2) {
+      if (this.spawnNear(h)) { this.fearCd = 420; this.say(h, 'くらい……こわい……', 'cry', 80); }
+      else this.fearCd = 60;
+    }
+  }
+
   tryLever(hero) {
     for (const l of this.levers) if (l.near(hero)) { l.pull(this); return true; }
     return false;
@@ -648,6 +692,10 @@ class Game {
   }
 
   attackHit(hero, box) {
+    for (const gd of this.guards) {
+      if (hero.hitList.has(gd) || !overlap(box, gd.box())) continue;
+      if (gd.bump(this, hero.facing)) { hero.hitList.add(gd); this.shake = 1.5; }
+    }
     for (const s of this.shadows) {
       if (!s.alive || hero.hitList.has(s)) continue;
       if (overlap(box, s.box())) {
@@ -842,7 +890,8 @@ class Game {
     this.ui.skip.style.display = 'block';
     this.ui.hud.style.display = 'none';
     this.cutSkip = () => { this.cut = null; this.hideTalk(); this.beginEscape(first); };
-    this.cut = new Cutscene(this, collapseScript(retry), () => this.beginEscape(first));
+    const script = CHAPTERS[this.chapter].escapeScript || collapseScript;
+    this.cut = new Cutscene(this, script(retry), () => this.beginEscape(first));
   }
 
   // ---- the hill at dawn: hold out until the sun is up --------------------------------
@@ -902,6 +951,19 @@ class Game {
     return false;
   }
 
+  // ---- chapter 3: Marta at the sanatorium ---------------------------------------------
+  updateMarta() {
+    const m = this.martaSpot;
+    if (!m || m.done || this.hero.x < m.x - 40 || Math.abs(this.hero.y - m.y) > 20) return false;
+    m.done = true;
+    this.state = 'cutscene';
+    this.ui.skip.style.display = 'block'; this.ui.hud.style.display = 'none';
+    const spot = this.npcSpots.find((e) => e.name === 'marta');
+    this.cutSkip = () => { this.cut = null; this.hideTalk(); this.startEscapeCut(false); };
+    this.cut = new Cutscene(this, martaScript(spot), () => this.startEscapeCut(false));
+    return true;
+  }
+
   // ---- the collapse: run for the exit hand in hand ---------------------------------
   placeAtEscape() {
     const e = this.escapeSpot, hero = this.hero, h = this.heroine;
@@ -920,7 +982,9 @@ class Game {
     for (let i = 0; i < 20; i++) hero.trail.push({ x: h.x + (hero.x - h.x) * i / 19, y: hero.y });
     hero.lastSafe = { x: hero.x, y: hero.y };
     this.escape = true;
-    this.collapse = new Collapse(e.x - 110, e.y);
+    this.collapse = new Collapse(e.x - 110, e.y, CHAPTERS[this.chapter].pursuit || 'rubble');
+    for (const n of [...this.npcs]) this.removeNpc(n.key);
+    this.heroine.hooded = false;
     this.state = 'play';
     this.ui.skip.style.display = 'none'; this.ui.hud.style.display = 'flex';
     if (first) {
@@ -1125,6 +1189,13 @@ class Game {
     this.drawWindowBeams(ctx, cx, cy);
     if (this.door) this.door.draw(ctx, cx, cy, T);
     for (const d of this.doorways) d.draw(ctx, cx, cy, T);
+    for (const n of this.nooks) {                // dark doorways to hide in
+      const x = Math.round(n.x0 - cx), y = Math.round(n.y - cy), w = n.x1 - n.x0;
+      ctx.fillStyle = '#2a2230'; ctx.fillRect(x - 2, y - 44, w + 4, 44);
+      ctx.fillStyle = '#07060a'; ctx.fillRect(x, y - 40, w, 40);
+      ctx.fillStyle = '#4a3a38'; ctx.fillRect(x - 2, y - 44, w + 4, 2);
+    }
+    for (const L of this.lamps) L.draw(ctx, cx, cy);
     for (const m of this.markers) m.drawStone(ctx, cx, cy);
     for (const m of this.markers) m.drawShadow(ctx, cx, cy, T);
     for (const s of this.signs) s.draw(ctx, cx, cy);
@@ -1144,6 +1215,8 @@ class Game {
 
     const h = this.heroine;
     if (this.wallShadow) this.drawWallShadow(ctx, cx, cy);
+    for (const gd of this.guards) gd.drawCone(ctx, cx, cy);
+    for (const gd of this.guards) gd.draw(ctx, cx, cy);
     for (const n of this.npcs) n.draw(ctx, cx, cy);
     if (h.state !== 'carried') h.draw(ctx, cx, cy);
     for (const s of this.shadows) {
@@ -1219,7 +1292,8 @@ class Game {
     L.push({ x: hero.x, y: hero.y - 20, r: 58, a: 0.55 });
     const fl = hero.caneFlare();
     if (fl > 0) { const tip = hero.caneTip(); L.push({ x: tip.x, y: tip.y - 2, r: 24 + 34 * fl, a: 0.85, col: `rgba(255,150,60,${0.22 * fl})` }); }
-    L.push({ x: h.x, y: h.y - 16, r: 50, a: 0.8, col: 'rgba(200,220,255,0.10)' });
+    L.push(h.hooded ? { x: h.x, y: h.y - 16, r: 18, a: 0.4 } : { x: h.x, y: h.y - 16, r: 50, a: 0.8, col: 'rgba(200,220,255,0.10)' });
+    for (const lp of this.lamps) { const l = lp.light(); if (l) L.push(l); }
     for (const p of this.plates) { const l = p.light(); if (l) L.push(l); }
     for (const s of this.shrines) { const l = s.light(); if (l) L.push(l); }
     if (this.door) L.push(this.door.light());
@@ -1236,7 +1310,10 @@ class Game {
     lc.globalCompositeOperation = 'source-over';
     lc.clearRect(0, 0, VW, VH);
     // the forest is lighter than the cathedral, and lighter still as the sun comes up
-    lc.fillStyle = this.world.theme === 'forest' ? `rgba(8,6,24,${0.46 * (1 - 0.85 * this.sun)})` : 'rgba(5,3,14,0.64)';
+    const hr = this.hero, inDark = this.darks.some((d) => hr.x >= d.x0 && hr.x < d.x1 && hr.y > d.y0 && hr.y <= d.y1);
+    lc.fillStyle = inDark ? 'rgba(2,2,6,0.95)'
+      : this.world.theme === 'forest' ? `rgba(8,6,24,${0.46 * (1 - 0.85 * this.sun)})`
+      : this.world.theme === 'town' ? 'rgba(6,5,16,0.6)' : 'rgba(5,3,14,0.64)';
     lc.fillRect(0, 0, VW, VH);
     lc.globalCompositeOperation = 'destination-out';
     const L = this.lights();
@@ -1307,6 +1384,14 @@ class Game {
     }
     ctx.fillStyle = col;
     for (let j = 0; j < g.length; j++) for (let i = 0; i < g[0].length; i++) if (g[j][i] === '#') ctx.fillRect(ox + i * 2, oy + j * 2, 2, 2);
+    if (CHAPTERS[this.chapter].hood) {
+      // coat icon (on / off) and the fear gauge
+      ctx.fillStyle = h.hooded ? '#5a5468' : '#ffe9a8';
+      ctx.fillRect(ox + 20, oy + 1, 7, 9); ctx.fillStyle = '#1a1030'; ctx.fillRect(ox + 20, oy + 1, 7, 1);
+      ctx.fillStyle = '#1a1030'; ctx.fillRect(ox + 30, oy + 3, 34, 6);
+      ctx.fillStyle = this.fear > 0.8 && (this.t >> 3) % 2 ? '#ff6080' : '#8a60d0';
+      ctx.fillRect(ox + 31, oy + 4, Math.round(32 * this.fear), 4);
+    }
     // off-screen arrow toward her
     const x = h.x - cx, y = h.y - 16 - cy;
     if (x < -4 || x > VW + 4 || y < -4 || y > VH + 4) {

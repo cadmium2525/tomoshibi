@@ -2,6 +2,20 @@
 // ---------------------------------------------------------------------------
 // World: tile collision, dynamic solids, pre-rendered tile layers
 // ---------------------------------------------------------------------------
+// what each chapter's world is built from
+const THEMES = {
+  cathedral: { front: (r) => (r < 0.08 ? 'fg4' : r < 0.14 ? 'fg5' : 'fg' + Math.floor(r * 4)), top: 'top',
+    back: (r) => (r < 0.06 ? 'bg4' : r < 0.12 ? 'bg5' : 'bg' + Math.floor(r * 4)),
+    deep: '#0d0b16', shade: 'rgba(10,8,18,0.72)', edges: ['#1e1a28', '#9890a8', '#3a3448', '#403a50'] },
+  forest: { front: (r) => 'dirt' + Math.floor(r * 6), top: 'grass', back: (r) => 'eback' + Math.floor(r * 4),
+    deep: '#1a1014', shade: 'rgba(14,8,10,0.6)', edges: ['#1a1014', '#8a6448', '#3a2622', '#4a3228'],
+    sky: { grad: 'sky2', far: 'hills2', mid: 'trees2', farFill: '#262240', midFill: '#181628' } },
+  town: { front: (r) => 'cob' + Math.floor(r * 4), top: 'ctop', back: (r) => 'wall' + Math.floor(r * 4),
+    back2: (r) => 'plaster' + Math.floor(r * 4),
+    deep: '#0e0c14', shade: 'rgba(8,8,14,0.66)', edges: ['#14121a', '#8a8898', '#3a3844', '#34323e'],
+    sky: { grad: 'sky3', far: 'far3', mid: 'mid3', farFill: '#1a1830', midFill: '#121020' } },
+};
+
 class World {
   constructor(stage, theme = 'cathedral') {
     this.theme = theme;
@@ -60,20 +74,21 @@ class World {
     this.depth = depth;
 
     const mk = () => { const c = document.createElement('canvas'); c.width = this.pw; c.height = this.ph; return c; };
+    const TH = THEMES[this.theme];
     // back wall layer
     this.back = mk();
     let g = this.back.getContext('2d');
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      if (this.solid[y * W + x] || this.noBg[y * W + x]) continue;
+      const nb = this.noBg[y * W + x];
+      if (this.solid[y * W + x] || nb === 1) continue;
       const r = this.hash(x, y);
-      const name = this.theme === 'forest' ? 'eback' + Math.floor(r * 4)
-        : r < 0.06 ? 'bg4' : r < 0.12 ? 'bg5' : 'bg' + Math.floor(r * 4);
+      const name = nb === 2 && TH.back2 ? TH.back2(r) : TH.back(r);
       drawTile(g, name, x * TILE, y * TILE);
     }
     // soft shadow under ceilings / beside walls on the back wall
     g.fillStyle = 'rgba(6,4,14,0.45)';
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      if (this.solid[y * W + x] || this.noBg[y * W + x]) continue;
+      if (this.solid[y * W + x] || this.noBg[y * W + x] === 1) continue;
       if (this.tile(x, y - 1)) g.fillRect(x * TILE, y * TILE, TILE, 5);
       if (this.tile(x - 1, y)) g.fillRect(x * TILE, y * TILE, 3, TILE);
       if (this.tile(x + 1, y)) g.fillRect(x * TILE + 13, y * TILE, 3, TILE);
@@ -86,15 +101,13 @@ class World {
       if (!this.solid[y * W + x]) continue;
       const d = depth[y * W + x];
       const px = x * TILE, py = y * TILE;
-      if (d >= 3) { g.fillStyle = this.theme === 'forest' ? '#1a1014' : '#0d0b16'; g.fillRect(px, py, TILE, TILE); continue; }
+      if (d >= 3) { g.fillStyle = TH.deep; g.fillRect(px, py, TILE, TILE); continue; }
       const r = this.hash(x + 999, y);
-      const forest = this.theme === 'forest';
-      const name = forest ? 'dirt' + Math.floor(r * 6) : r < 0.08 ? 'fg4' : r < 0.14 ? 'fg5' : 'fg' + Math.floor(r * 4);
-      drawTile(g, name, px, py);
-      if (d === 2) { g.fillStyle = forest ? 'rgba(14,8,10,0.6)' : 'rgba(10,8,18,0.72)'; g.fillRect(px, py, TILE, TILE); }
+      drawTile(g, TH.front(r), px, py);
+      if (d === 2) { g.fillStyle = TH.shade; g.fillRect(px, py, TILE, TILE); }
       const open = (dx, dy) => !this.tile(x + dx, y + dy) && y + dy < H;
-      const E = forest ? ['#1a1014', '#8a6448', '#3a2622', '#4a3228'] : ['#1e1a28', '#9890a8', '#3a3448', '#403a50'];
-      if (open(0, -1)) drawTile(g, (forest ? 'grass' : 'top') + Math.floor(this.hash(x, y + 7) * 4), px, py);
+      const E = TH.edges;
+      if (open(0, -1)) drawTile(g, TH.top + Math.floor(this.hash(x, y + 7) * 4), px, py);
       if (open(-1, 0)) { g.fillStyle = E[0]; g.fillRect(px, py, 1, TILE); g.fillStyle = E[1]; g.fillRect(px + 1, py + (open(0, -1) ? 2 : 0), 1, TILE - (open(0, -1) ? 2 : 0)); }
       if (open(1, 0)) { g.fillStyle = E[0]; g.fillRect(px + 15, py, 1, TILE); g.fillStyle = E[2]; g.fillRect(px + 14, py, 1, TILE); }
       if (open(0, 1)) { g.fillStyle = E[0]; g.fillRect(px, py + 15, TILE, 1); g.fillStyle = E[3]; g.fillRect(px, py + 14, TILE, 1); }
@@ -102,7 +115,7 @@ class World {
   }
 
   drawParallax(ctx, cx, cy, sun = 0) {
-    if (this.theme === 'forest') { this.drawSky(ctx, cx, cy, sun); return; }
+    if (THEMES[this.theme].sky) { this.drawSky(ctx, cx, cy, sun); return; }
     const far = Sheets.bgfar.img, mid = Sheets.bgmid.img;
     const layer = (img, fx, fy, oy) => {
       const w = img.width, h = img.height;
@@ -117,7 +130,8 @@ class World {
 
   // dawn sky: a fixed gradient, hills and a tree line that scroll (not repeated vertically)
   drawSky(ctx, cx, cy, sun) {
-    ctx.drawImage(Sheets.sky2.img, 0, 0, 1, Sheets.sky2.img.height, 0, 0, VW, VH);
+    const S = THEMES[this.theme].sky, grad = Sheets[S.grad].img;
+    ctx.drawImage(grad, 0, 0, 1, grad.height, 0, 0, VW, VH);
     if (sun > 0) {                  // morning: the sky turns pale blue above and gold at the horizon
       const g = ctx.createLinearGradient(0, 0, 0, VH);
       g.addColorStop(0, `rgba(120,160,220,${0.9 * sun})`); g.addColorStop(0.6, `rgba(230,190,190,${0.9 * sun})`);
@@ -130,10 +144,10 @@ class World {
       const oy = Math.round(base + VH - img.height - (cy - 270) * fy);     // ~270 = camera at ground level
       for (let x = ox; x < VW; x += w) ctx.drawImage(img, x, oy);
       const last = oy + img.height;
-      if (last < VH) { ctx.fillStyle = img === Sheets.trees2.img ? '#181628' : '#262240'; ctx.fillRect(0, last, VW, VH - last); }
+      if (last < VH) { ctx.fillStyle = img === Sheets[S.mid].img ? S.midFill : S.farFill; ctx.fillRect(0, last, VW, VH - last); }
     };
-    band(Sheets.hills2.img, 0.08, 0.05, 0);
-    band(Sheets.trees2.img, 0.3, 0.2, 20);
+    band(Sheets[S.far].img, 0.08, 0.05, 0);
+    band(Sheets[S.mid].img, 0.3, 0.2, 20);
   }
 
   drawBack(ctx, cx, cy) {

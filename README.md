@@ -107,7 +107,8 @@ cd tools && python build_assets.py
 ## 次にやること
 
 - 第2章「薄明の森」の手直し（遊んでもらった感想から）。設計は `docs/CHAPTER2.md`
-- 第3章「消灯の街」の設計。第1・2章より長め（初見 20 分前後）に
+- 第3章「消灯の街」の手直し（遊んでもらった感想から）。設計は `docs/CHAPTER3.md`
+- 第4章「灯守りの塔」の設計
 - 収集物の置き方を見直す：本道から枝分かれした寄り道（仕掛けを使って行く脇道・隠し部屋）の先に置く。第3章以降はこの形で作り、第1・2章も後で直す
 - ハードモード（最後の章まで作ってから）：セーブは章クリア時だけ、敵の体力を増やす、防衛戦を長くする など
 - 第1章をさらに区画ごとに作り込み、初見で15分前後に（今は 牢と回廊 → 縦穴 → 奈落の回廊 → 大階段 → 石像の間 → 脆き橋 → 光の橋 → 大広間 → 崩落からの逃走）
@@ -116,4 +117,4 @@ cd tools && python build_assets.py
 ## テスト用
 
 - `python tools/devserver.py 8932` → `http://localhost:8932/?debug` で開くと `T.run(frames, keys)` などのデバッグ関数が使える
-- `tools/autoplay.js` を読み込んで `autoplay()` を実行すると、第1章をスタートからクリアまで自動でプレイして検証する（第2章は `tools/autoplay2.js` の `autoplay2()`）
+- `tools/autoplay.js` を読み込んで `autoplay()` を実行すると、第1章をスタートからクリアまで自動でプレイして検証する（第2章は `tools/autoplay2.js` の `autoplay2()`、第3章は `tools/autoplay3.js` の `autoplay3()`）

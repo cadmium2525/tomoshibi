@@ -86,6 +86,49 @@ function collapseScript(retry) {
 }
 
 // ---------------------------------------------------------------------------
+// Chapter 3: Marta at the sanatorium, then the bells.
+// ---------------------------------------------------------------------------
+function martaScript(spot) {
+  return [
+    Cut.run((g) => {
+      g.hero.setState('scripted'); g.heroine.setState('scripted'); g.hero.vx = g.heroine.vx = 0;
+      g.heroine.hooded = false;
+      g.addNpc('marta', 'marta', spot.x, spot.y);
+    }),
+    Cut.walk('hero', 311, 0.6),
+    Cut.walk('heroine', 312.4, 0.6),
+    Cut.talk('マルタ', '……その 光は。 ……ルミナ？ ルミナ なのね。'),
+    Cut.talk('ルミナ', 'マルタ……！ ずっと、会いたかった。'),
+    Cut.run((g) => g.heroine.emote('♥', 80)),
+    Cut.talk('マルタ', '大きく なったねえ……。 グレイ、あなたが 連れてきて くれたのね。'),
+    Cut.talk('グレイ', '約束だからな。 ……体は どうだ。'),
+    Cut.talk('マルタ', 'わたしのことは いいの。 それより、女王様が 灯狩りを 急がせている。 この街も 長くは いられないわ。'),
+    Cut.talk('マルタ', 'ルミナ、これを。 わたしが ずっと 胸に つけていた 小さな灯り。'),
+    Cut.run((g) => { Sfx.play('save'); g.particles.burst(g.heroine.x, g.heroine.y - 20, 14, { col: '#ffe0a0', life: 30, max: 1.2 }); }),
+    Cut.talk('マルタ', '小さな灯りで いいの。 消さずに、持って いきなさい。'),
+    Cut.talk('ルミナ', '……うん。 ぜったい、消さない。'),
+    Cut.run((g) => { Sfx.play('lever'); g.shake = 3; }),
+    Cut.wait(20),
+    Cut.run((g) => { Sfx.play('lever'); g.shake = 3; }),
+    Cut.talk('グレイ', '……鐘だ。 窓から 光が 漏れたか。'),
+    Cut.talk('マルタ', '裏の 階段から 屋根へ 出られるわ。 北の門まで 屋根伝いに 行きなさい。 ……さあ、早く！'),
+  ];
+}
+
+function bellsScript(retry) {
+  const setup = Cut.run((g) => { g.hero.setState('scripted'); g.heroine.setState('scripted'); g.hero.vx = g.heroine.vx = 0; });
+  return [
+    setup,
+    Cut.run((g) => { if (retry) g.black = 1; }),
+    ...(retry ? [] : [Cut.fade(1, 30)]),
+    Cut.run((g) => g.placeAtEscape()),
+    Cut.fade(0, 30),
+    Cut.run((g) => { Sfx.play('lever'); g.shake = 3; }),
+    Cut.say('hero', 'ルミナ、手を！ 北の門まで 走るぞ！', 'hero', 90),
+  ];
+}
+
+// ---------------------------------------------------------------------------
 // Prologue: Marta's letter -> Grey climbs down into the forgotten cathedral ->
 // finds Lumina talking to her own shadow -> she takes his hand -> the seal
 // breaks and the shadows wake up.
