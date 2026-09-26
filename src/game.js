@@ -372,7 +372,9 @@ class Game {
     Sfx.unlock(); Sfx.startBgm();
     this.hideCenter();
     this.collected = new Set(d.collected || []);          // what was found stays found
-    const n = CHAPTERS[d.chapter] ? d.chapter : 1;
+    let n = CHAPTERS[d.chapter] ? d.chapter : 1;
+    // cleared a chapter before the next one existed: go on to it now
+    if (d.cleared.includes(n) && CHAPTERS[n + 1]) { this.startChapter(n + 1); return; }
     this.chapter = n;
     const C = useChapter(n);
     if (d.fresh && !d.cleared.includes(n)) { this.startChapter(n); return; }
@@ -1079,7 +1081,10 @@ class Game {
       ? `<div class="menu title-menu"><button data-cmd="continue"${sel(0)}>つづきから</button><button data-cmd="newgame"${sel(1)}>はじめから</button></div>
          <div class="note">${this.saveLabel(this.titleSave)}</div>`
       : `<div class="blink">${Touch.enabled ? 'タップでスタート' : 'PRESS Z / ENTER'}</div>`;
-    const tc = CHAPTERS[this.titleSave && CHAPTERS[this.titleSave.chapter] ? this.titleSave.chapter : 1];
+    const sv = this.titleSave;
+    let tn = sv && CHAPTERS[sv.chapter] ? sv.chapter : 1;
+    if (sv && sv.cleared.includes(tn) && CHAPTERS[tn + 1]) tn++;
+    const tc = CHAPTERS[tn];
     this.showCenter(`<h1>灯のルミナ</h1><h2>第${tc.num}章 ─ ${tc.title}</h2>
       <div class="press">${press}
       ${document.body.classList.contains('portrait') ? '<div class="note">📱 横向きにすると 画面が大きくなります</div>' : ''}</div>`,
@@ -1087,7 +1092,8 @@ class Game {
     this.ui.titlebg.style.display = 'block';
   }
   saveLabel(d) {
-    const c = CHAPTERS[d.chapter] ? d.chapter : 1;
+    let c = CHAPTERS[d.chapter] ? d.chapter : 1;
+    if (d.cleared.includes(c) && CHAPTERS[c + 1]) return `第${c + 1}章 ─ 章のはじめ`;
     if (d.cleared.includes(c)) return `第${c}章 クリア済み`;
     const n = d.cp ? d.cp.shrines.length : 0;
     return `第${c}章 ─ ${n && !d.fresh ? `灯した灯籠 ${n}` : '章のはじめ'}`;
