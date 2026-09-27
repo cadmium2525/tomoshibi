@@ -12,7 +12,9 @@ window.T = {
       const h = game.hero;
       if (h && h.onGround && game.state === 'play') (T.visited[game.chapter] = T.visited[game.chapter] || new Set()).add(Math.floor(h.x / 16) + ',' + Math.round(h.y / 16));
     }
-    Input.keys.clear(); game.render(); return T.st();
+    Input.keys.clear();
+    if (T.fast) return null;                     // (long scripted runs: skip drawing every call)
+    game.render(); return T.st();
   },
   st() {
     const g = game, h = g.hero, y = g.heroine, f = (v) => +(v / 16).toFixed(2);

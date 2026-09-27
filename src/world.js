@@ -20,6 +20,10 @@ const THEMES = {
     back2: () => 'shelf0',
     deep: '#140e12', shade: 'rgba(14,8,12,0.66)', edges: ['#160e12', '#b09a86', '#40302e', '#3a2c2c'],
     sky: { grad: 'sky4', far: 'far4', mid: 'mid4', farFill: '#3c2440', midFill: '#221624' } },
+  valley: { front: (r) => 'vrock' + Math.floor(r * 4), top: 'vtop', back: (r) => 'vcave' + Math.floor(r * 4),
+    back2: (r) => 'vplay' + Math.floor(r * 4),
+    deep: '#100e1a', shade: 'rgba(10,8,20,0.66)', edges: ['#100e1a', '#8a8eaa', '#2e2e44', '#2a2a40'],
+    sky: { grad: 'sky5', far: 'far5', mid: 'mid5', farFill: '#30264a', midFill: '#1a1628' } },
 };
 
 class World {
@@ -27,6 +31,9 @@ class World {
     this.theme = theme;
     this.W = stage.W; this.H = stage.H;
     this.solid = stage.solid; this.noBg = stage.noBg;
+    // chapter 5: shadow road (1) and light moss (2). Solid or not by Lumina's light, frame by frame
+    this.soft = stage.soft || null; this.softOn = new Uint8Array(stage.W * stage.H); this.softList = [];
+    if (this.soft) for (let i = 0; i < this.soft.length; i++) if (this.soft[i]) this.softList.push(i);
     this.pw = this.W * TILE; this.ph = this.H * TILE;
     this.dyn = [];            // objects with solidBox() -> box|null
     this.decor = stage.decor;
@@ -36,7 +43,8 @@ class World {
   tile(tx, ty) {
     if (tx < 0 || tx >= this.W || ty < 0) return 1;
     if (ty >= this.H) return 0;           // bottomless below the map
-    return this.solid[ty * this.W + tx];
+    const i = ty * this.W + tx;
+    return this.solid[i] || this.softOn[i];
   }
   tileAt(px, py) { return this.tile(Math.floor(px / TILE), Math.floor(py / TILE)); }
 
@@ -65,6 +73,7 @@ class World {
 
   prerender() {
     const W = this.W, H = this.H;
+    // (softOn is all 0 while this runs: rock only)
     // distance of each solid cell to the nearest open cell (for dark rock mass)
     const depth = new Uint8Array(W * H).fill(9);
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -117,6 +126,41 @@ class World {
       if (open(-1, 0)) { g.fillStyle = E[0]; g.fillRect(px, py, 1, TILE); g.fillStyle = E[1]; g.fillRect(px + 1, py + (open(0, -1) ? 2 : 0), 1, TILE - (open(0, -1) ? 2 : 0)); }
       if (open(1, 0)) { g.fillStyle = E[0]; g.fillRect(px + 15, py, 1, TILE); g.fillStyle = E[2]; g.fillRect(px + 14, py, 1, TILE); }
       if (open(0, 1)) { g.fillStyle = E[0]; g.fillRect(px, py + 15, TILE, 1); g.fillStyle = E[3]; g.fillRect(px, py + 14, TILE, 1); }
+    }
+  }
+
+  // the shadow road and the light moss, as they are this frame
+  drawSoft(ctx, cx, cy, t) {
+    const W = this.W;
+    for (const i of this.softList) {
+      const tx = i % W, ty = (i - tx) / W, x = tx * TILE - cx, y = ty * TILE - cy;
+      if (x < -16 || y < -16 || x > VW || y > VH) continue;
+      const on = this.softOn[i], k = this.soft[i];
+      const upOpen = !this.soft[i - W] && !this.solid[i - W];
+      if (k === 1) {
+        if (on) {
+          ctx.fillStyle = 'rgba(20,12,36,0.9)'; ctx.fillRect(x, y, TILE, TILE);
+          ctx.fillStyle = 'rgba(46,30,78,0.9)';
+          for (let px = 0; px < TILE; px += 2) ctx.fillRect(x + px, y + 3 + ((px + tx * 3 + (t >> 3)) % 5 === 0 ? 1 : 0), 2, 1);
+          if (upOpen) {
+            ctx.fillStyle = '#6a4ca8';
+            for (let px = 0; px < TILE; px++) ctx.fillRect(x + px, y + Math.round(Math.sin((tx * TILE + px) * 0.4 + t * 0.06)), 1, 1);
+          }
+        } else {                                  // melted in the light: only a faint trace
+          ctx.fillStyle = 'rgba(90,70,140,0.28)';
+          for (let px = (tx + ty) % 3; px < TILE; px += 3) ctx.fillRect(x + px, y + (upOpen ? 0 : 8), 1, 1);
+        }
+      } else {
+        if (on) {
+          ctx.fillStyle = '#26402e'; ctx.fillRect(x, y, TILE, TILE);
+          ctx.fillStyle = '#5a8a48'; for (let px = (tx * 7) % 4; px < TILE; px += 4) ctx.fillRect(x + px, y + 5 + (px % 3), 2, 2);
+          if (upOpen) { ctx.fillStyle = '#d8f088'; ctx.fillRect(x, y, TILE, 1); ctx.fillStyle = '#9ccc60'; ctx.fillRect(x, y + 1, TILE, 2); }
+        } else {                                  // dark moss on a web of old vines
+          ctx.fillStyle = 'rgba(60,84,60,0.5)';
+          ctx.fillRect(x, y + 1, TILE, 1);
+          for (let px = (tx * 5) % 4; px < TILE; px += 4) ctx.fillRect(x + px, y + 2 + ((px + tx) % 3), 2, 1);
+        }
+      }
     }
   }
 
@@ -205,6 +249,8 @@ class World {
           break;
         }
         case 'twindow': drawTile(ctx, 'twindow', x, y); break;
+        case 'shut': drawTile(ctx, 'shut', x - 16, y - 40); break;
+        case 'slaundry': drawTile(ctx, 'slaundry', x, y); break;
         case 'cat': if (Math.floor(t / 400 + d.x) % 5) drawTile(ctx, 'cat', x + 2, y - 8); break;     // now and then it wanders off
         case 'smoke':                             // someone keeps a stove going behind the shutters
           for (let i = 0; i < 5; i++) {

@@ -279,3 +279,64 @@ function prologueScript() {
     Cut.chapter('第1章', '忘れられた地下聖堂'),
   ];
 }
+
+// ---------------------------------------------------------------------------
+// Chapter 5: the wall of shadow plays, the whale, the great shadow wakes and goes.
+// ---------------------------------------------------------------------------
+function playwallScript(lit) {
+  return [
+    hold(),
+    Cut.talk('ルミナ', '……この かべ。'),
+    Cut.run((g) => g.heroine.emote('!', 70)),
+    Cut.talk('ルミナ', 'うさぎ、ことり、きつね……くじら。 これ、わたしが つくったの。 ひとりで、まいばん。'),
+    Cut.talk('ルミナ', '聖堂の かべに てを かざして、ろうそくの あかりで……。 みんなに なまえも つけたの。'),
+    Cut.talk('グレイ', '……影の子らは、君の 影絵から 生まれたのか。'),
+    Cut.talk('ルミナ', 'みんな、わたしを つれていこうと してたんじゃ ないんだね。 ……さみしかったんだ。 わたしと おなじで。'),
+    ...(lit > 0 ? [Cut.talk('ルミナ', `${lit} まいの 絵に、あかりが ともってる……。 ひろってきた かけらの ぶんだけ。`)] : []),
+    Cut.talk('グレイ', '……谷の 奥へ 行こう。 あの子らが 帰っていった 先へ。'),
+  ];
+}
+function whaleStartScript() {
+  return [
+    hold(),
+    Cut.run((g) => { g.shake = 3; Sfx.play('emerge'); }),
+    Cut.wait(70),
+    Cut.talk('ルミナ', '……くじら？'),
+    Cut.talk('グレイ', '影の海に 棲む影か……。 奥で 眠っている 何かを 守っているようだ。'),
+    Cut.talk('グレイ', 'ルミナ、この岩の上で 待っていてくれ。 君の光の中へ、あれを 打ち上げてやる。'),
+    Cut.walk('heroine', 343, 0.8),
+    Cut.talk('グレイ', '（波紋が 足元に 集まったら、跳び出してくる合図だ）'),
+  ];
+}
+function whaleEndScript() {
+  return [
+    hold(),
+    Cut.wait(40),
+    Cut.talk('ルミナ', '……ちいさく なった。'),
+    Cut.run((g) => g.heroine.emote('!', 70)),
+    Cut.talk('ルミナ', 'くじらさん……？ ……わたしが いちばん さいしょに つくった 影絵。'),
+    Cut.talk('ルミナ', 'ずっと、ここで まってたの？ ……ごめんね。 もう、ひとりじゃないよ。'),
+    Cut.talk('グレイ', '影を 消すのは 闇じゃない。 ……もうひとつの 光だ。 君が 照らしたから、あの子は 還れたんだ。'),
+    Cut.run((g) => { if (g.ookage) g.ookage.state = 'wake'; g.shake = 4; Sfx.play('emerge'); }),
+    Cut.wait(130),
+    Cut.talk('ルミナ', '……！ あれも……わたし？'),
+    Cut.talk('グレイ', 'ルミナ、下がれ！'),
+    Cut.run((g) => { if (g.ookage) g.ookage.state = 'go'; g.shake = 8; Sfx.play('fall'); }),
+    Cut.wait(130),
+    Cut.talk('グレイ', '……王城の ほうへ 行った。'),
+    Cut.run((g) => { g.shake = 6; Sfx.play('block'); }),
+    Cut.talk('グレイ', '谷が 崩れる……！'),
+  ];
+}
+function valleyEscapeScript(retry) {
+  const setup = Cut.run((g) => { g.hero.setState('scripted'); g.heroine.setState('scripted'); g.hero.vx = g.heroine.vx = 0; });
+  return [
+    setup,
+    Cut.run((g) => { if (retry) g.black = 1; if (g.ookage) g.ookage.alpha = 0; }),
+    ...(retry ? [] : [Cut.fade(1, 30)]),
+    Cut.run((g) => g.placeAtEscape()),
+    Cut.fade(0, 30),
+    Cut.run((g) => { Sfx.play('block'); g.shake = 4; }),
+    Cut.say('hero', 'ルミナ、手を！ 上まで 駆け上がるぞ！', 'hero', 90),
+  ];
+}

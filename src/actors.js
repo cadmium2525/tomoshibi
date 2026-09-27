@@ -1204,3 +1204,306 @@ class Moth {
     ctx.restore();
   }
 }
+
+// ---------------------------------------------------------------------------
+// Chapter 5: a shadow child at home in its village. It potters about and pays
+// no mind to anyone - until Lumina's light comes near (hidden under the coat she
+// can pass right by). Then it wants her, like any other shadow. If it loses her
+// under the coat it wanders off home again.
+class Villager extends Shadow {
+  constructor(portal, e) {
+    super(portal);
+    this.x0 = e.x0 * TILE + 8; this.x1 = e.x1 * TILE + 8;
+    this.state = 'wander'; this.pause = 0; this.dir = e.dir || 1; this.calm = 0;
+    this.hop = e.hop || 0;                         // some play at hopping
+  }
+  isThreat() { return this.alive && !['die', 'emerge', 'wander'].includes(this.state); }
+  notices(game) {
+    const h = game.heroine;
+    if (h.state === 'carried' || h.carriedBy) return false;
+    const dx = h.x - this.x, dy = h.y - this.y;
+    if (h.hooded) return false;                  // under the coat she is just another shadow to them
+    return Math.abs(dx) < 96 && Math.abs(dy) < 48;
+  }
+  update(game) {
+    if (this.state === 'wander') {
+      this.t++; this.animT++;
+      if (this.flash > 0) this.flash--;
+      if (this.t % 6 === 0) game.particles.add({ x: this.x + rand(-6, 6), y: this.y - rand(10, 36), vx: rand(-0.2, 0.2), vy: rand(-0.5, -0.2), life: 22, col: '#2a1a40', size: 2, shrink: true });
+      if (this.notices(game)) {
+        this.setState('seek'); this.swipeCd = 60; Sfx.play('emerge');
+        game.say(this, '！', 'cry', 50);
+        return;
+      }
+      if (this.pause > 0) { this.pause--; this.vx = approach(this.vx, 0, 0.1); }
+      else {
+        const tx = this.dir > 0 ? this.x1 : this.x0;
+        if (Math.abs(tx - this.x) < 3) { this.dir = -this.dir; this.pause = 60 + Math.floor(rand(0, 90)); }
+        else { this.facing = this.dir; this.vx = approach(this.vx, this.dir * 0.35, 0.05); }
+        if (this.hop && this.onGround && this.t % this.hop === 0) this.vy = -2.6;
+      }
+      this.physics(game.world);
+      return;
+    }
+    // lost her under the coat: back to its own business
+    if (this.state === 'seek') {
+      const h = game.heroine;
+      this.calm = h.hooded && Math.abs(h.x - this.x) > 40 ? this.calm + 1 : 0;
+      if (this.calm > 150) { this.setState('wander'); this.calm = 0; game.say(this, '？', 'hero', 50); return; }
+    }
+    super.update(game);
+  }
+  frame() { return this.state === 'wander' ? 'walk' + (Math.floor(this.animT / 12) % 4) : super.frame(); }
+  draw(ctx, cx, cy) {
+    if (this.state !== 'wander') { super.draw(ctx, cx, cy); return; }
+    // at home and at ease: fainter, a little smaller
+    ctx.save(); ctx.globalAlpha = 0.72;
+    ctx.translate(Math.round(this.x - cx), Math.round(this.y - cy)); ctx.scale(0.85, 0.85);
+    drawSprite(ctx, 'shadow', this.frame(), 0, 0, this.facing < 0);
+    ctx.restore();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 影鯨: the first and biggest shadow play she ever made on the chapel wall - a whale.
+// It swims in the sea of shadow road at the bottom of the valley (only a fin shows),
+// gathers under Grey (ripples), and leaps out of the sea to land a little ahead.
+// Landing in the sea it dives again; landing where her light has dried the sea up
+// (or on rock) it is stranded, and Grey's pole reaches it. Three blows a stranding.
+class Whale {
+  constructor(B) {
+    this.B = B; this.sea = B.sea;                     // y of the sea's surface
+    this.x = B.x0 + 4 * TILE; this.y = this.sea + 10; this.dir = 1;
+    this.state = 'rise'; this.t = 0; this.animT = 0; this.hp = 12; this.hits = 0; this.phase = 1;
+    this.flash = 0; this.alive = true; this.alpha = 1; this.scale = 1; this.singT = 0; this.offSea = 0; this.again = false;
+  }
+  setState(s) { this.state = s; this.t = 0; }
+  P() { return [null, { speed: 1.1, ripple: 55, beach: 240 }, { speed: 1.4, ripple: 45, beach: 210 }, { speed: 1.7, ripple: 36, beach: 180 }][Math.min(3, this.phase)]; }
+  seaAt(game, x) {                                   // is there shadow sea (set, not dried up) at x?
+    const w = game.world, tx = Math.floor(x / TILE), ty = Math.floor(this.sea / TILE);
+    return w.soft && w.soft[ty * w.W + tx] === 1 && w.softOn[ty * w.W + tx] === 1;
+  }
+  onSea(game, a) { return a.onGround && Math.abs(a.y - this.sea) < 2 && this.seaAt(game, a.x); }
+  hurtBox() {
+    if (this.state === 'beached') return { x0: this.x - 30, x1: this.x + 30, y0: this.y - 24, y1: this.y };
+    if (this.state === 'drag') return { x0: this.x - 22, x1: this.x + 22, y0: this.sea - 20, y1: this.sea + 4 };
+    return null;
+  }
+  // under the sea, one step toward x (never through dried-up sea)
+  swimTo(game, x, speed) {
+    const d = x - this.x;
+    if (Math.abs(d) < 2) return true;
+    const nx = this.x + sign(d) * Math.min(speed, Math.abs(d));
+    this.dir = sign(d);
+    if (this.seaAt(game, nx + this.dir * 4)) { this.x = nx; return false; }
+    return true;                                      // (the light stops it here)
+  }
+  groundBelow(game, x, y) {
+    for (let k = 0; k < 200; k += 2) if (game.world.pointSolid(x, y + k)) return Math.floor((y + k) / TILE) * TILE;
+    return this.B.floor;
+  }
+  update(game) {
+    this.t++; this.animT++;
+    if (this.flash > 0) this.flash--;
+    const hero = game.hero, h = game.heroine, P = this.P(), B = this.B;
+    const bubble = (x) => game.particles.add({ x: x + rand(-10, 10), y: this.sea - 1, vx: rand(-0.3, 0.3), vy: rand(-0.9, -0.3), life: 24, col: Math.random() < 0.5 ? '#6a4ca8' : '#2a1a48', size: 1 });
+    switch (this.state) {
+      case 'rise':                                    // surfacing at the start (fin only)
+        this.alpha = Math.min(1, this.t / 40);
+        if (this.t > 60) this.setState('swim');
+        break;
+      case 'swim': {
+        // her, in the sea (under the coat, or wandered in): it goes for her first
+        const target = this.onSea(game, h) && h.grabbable() ? h : this.onSea(game, hero) ? hero : null;
+        if (!this.seaAt(game, this.x)) {             // the light came over it: away to the nearest sea
+          const s = this.nearestSea(game, this.x);
+          if (s !== null) this.x += sign(s - this.x) * Math.min(3, Math.abs(s - this.x));
+          break;
+        }
+        this.offSea = target ? 0 : this.offSea + 1;
+        if (target) {
+          if (this.swimTo(game, target.x, P.speed) && Math.abs(target.x - this.x) < 14) { this.target = target; this.setState('ripple'); }
+        } else {
+          // circle near Grey, as close as the sea lets it
+          const s = this.nearestSea(game, hero.x);
+          if (s !== null) this.swimTo(game, s + Math.sin(this.t * 0.02) * 24, P.speed * 0.6);
+        }
+        if (this.phase >= 2 && ++this.singT > 540 && this.state === 'swim') { this.singT = 0; this.setState('sing'); }
+        if (this.t % 20 === 0) bubble(this.x);
+        break;
+      }
+      case 'ripple': {                                // gathering under someone: the cue to jump aside
+        const a = this.target;
+        this.x += clamp(a.x - this.x, -0.4, 0.4);
+        if (this.t % 4 === 0) bubble(this.x);
+        if (this.t >= (this.again ? 26 : P.ripple)) {
+          if (!this.seaAt(game, this.x)) { this.setState('swim'); break; }
+          this.again = false;
+          this.bx = this.x; this.lx = this.x + this.dir * 5 * TILE; this.setState('breach'); Sfx.play('emerge'); game.shake = 4;
+          for (let i = 0; i < 16; i++) game.particles.add({ x: this.x + rand(-16, 16), y: this.sea, vx: rand(-1.2, 1.2), vy: rand(-3, -1), g: 0.12, life: 40, col: i % 2 ? '#3a2466' : '#8a70c8', size: 2 });
+          // it takes whoever stands right over it: Lumina into the sea, Grey it throws aside
+          if (a === h && Math.abs(h.x - this.x) < 14 && h.grabbable() && !h.carriedBy) {
+            h.carriedBy = this; h.setState('carried'); h.mode = 'follow';
+            this.setState('drag'); Sfx.play('grab'); game.stats.grabs++;
+            break;
+          }
+          if (Math.abs(hero.x - this.x) < 20 && Math.abs(hero.y - this.sea) < 24) hero.knock(this.dir);
+        }
+        break;
+      }
+      case 'breach': {                                // a leap out of the sea
+        const T = 56, f = Math.min(1, this.t / T);
+        this.x = lerp(this.bx, this.lx, f);
+        const gy = this.groundBelow(game, this.lx, this.sea - 4);
+        this.y = lerp(this.sea + 10, gy, f) - Math.sin(f * Math.PI) * 60;
+        if (Math.abs(hero.x - this.x) < 24 && hero.y > this.y - 20 && hero.y - 38 < this.y && this.t > 6 && this.t < T - 4) hero.knock(this.dir);
+        if (f >= 1) {
+          this.x = this.lx; this.y = gy;
+          if (this.seaAt(game, this.x) && Math.abs(gy - this.sea) < 4) {       // back into the sea
+            this.y = this.sea + 10; this.setState('swim'); Sfx.play('drop');
+            for (let i = 0; i < 14; i++) bubble(this.x);
+            if (this.phase >= 3 && !this.again) { this.again = true; this.target = hero; if (this.onSea(game, hero)) this.setState('ripple'); }
+          } else {                                    // stranded
+            this.setState('beached'); this.hits = 0; Sfx.play('block'); game.shake = 6;
+            if (Math.abs(h.x - this.x) < 26 && h.state === 'normal') { h.setState('down'); h.vx = this.dir * 1.2; h.vy = -2; }
+            if (!game.flags.whaleBeached) { game.flags.whaleBeached = true; game.say(hero, '打ち上がった……！ 今だ！', 'hero', 90); }
+          }
+        }
+        break;
+      }
+      case 'beached':
+        this.y = this.groundBelow(game, this.x, this.y - 8);
+        if (this.t > P.beach) this.setState('back');
+        break;
+      case 'back': {                                  // wriggles off into the dark, comes up in the sea
+        this.alpha = Math.max(0, 1 - this.t / 30);
+        if (this.t >= 30) {
+          const s = this.nearestSea(game, this.x);
+          this.x = s !== null ? s : B.x0 + 4 * TILE; this.y = this.sea + 10; this.alpha = 1; this.setState('swim');
+        }
+        break;
+      }
+      case 'drag': {                                  // it has her: down into the sea with her
+        this.y = this.sea + 10;
+        if (this.t > 150) { game.gameOver(); return; }
+        if (this.t % 6 === 0) bubble(this.x);
+        break;
+      }
+      case 'sing':                                    // a long low call: shadows answer from the sea
+        if (this.t === 1) { Sfx.play('door'); game.say(h, '……うたってる？', 'her', 80); }
+        if (this.t === 60) game.whaleCall();
+        if (this.t > 90) this.setState('swim');
+        break;
+      case 'die':
+        this.scale = Math.max(0.22, 1 - this.t / 90);
+        this.y = lerp(this.y, h.y - 28, 0.04); this.x = lerp(this.x, h.x + 18, 0.04);
+        if (this.t % 3 === 0) game.particles.add({ x: this.x + rand(-20, 20) * this.scale, y: this.y - rand(0, 20) * this.scale, vx: rand(-0.4, 0.4), vy: rand(-1, -0.2), life: 40, col: '#ffe9a8', size: 1 });
+        if (this.t >= 150) this.alive = false;
+        break;
+    }
+  }
+  nearestSea(game, x) {
+    for (let d = 0; d < 40 * TILE; d += TILE) {
+      if (this.seaAt(game, x - d)) return x - d;
+      if (this.seaAt(game, x + d)) return x + d;
+    }
+    return null;
+  }
+  carryOff() { return [0, 12]; }
+  hit(game, dir) {
+    if (this.state === 'drag') {
+      const h = game.heroine;
+      h.carriedBy = null; h.setState('down'); h.y = this.sea; h.vy = -3; h.vx = -dir * 0.8; h.flash = 20;
+      game.say(h, 'きゃっ…！', 'her', 40); Sfx.play('drop');
+      this.flash = 10; this.setState('back'); Sfx.play('hit');
+      return true;
+    }
+    if (this.state !== 'beached') return false;
+    this.hp--; this.hits++; this.flash = 10; game.shake = 3; Sfx.play('hit');
+    game.particles.burst(this.x, this.y - 12, 12, { col: '#e8d8ff', life: 16, max: 2 });
+    if (this.hp <= 0) { this.setState('die'); Sfx.play('kill'); game.shake = 8; return true; }
+    // four strandings in all (three blows each); it grows fiercer as it weakens
+    const phase = this.hp > 8 ? 1 : this.hp > 4 ? 2 : 3;
+    if (phase !== this.phase) {
+      this.phase = phase; game.shake = 6;
+      if (phase === 3) game.ring = 50;
+      game.say(game.heroine, phase === 2 ? '……ないてる。' : '……くらく なった……', 'cry', 90);
+    }
+    if (this.hits >= 3) this.setState('back');
+    return true;
+  }
+  draw(ctx, cx, cy) {
+    const x = Math.round(this.x - cx), sea = Math.round(this.sea - cy);
+    if (['rise', 'swim', 'ripple', 'drag', 'sing'].includes(this.state)) {
+      // under the sea: a dark shape, its fin cutting the surface, rings of ripples
+      ctx.save(); ctx.globalAlpha = 0.35 * this.alpha;
+      ctx.fillStyle = '#05020c'; ctx.beginPath(); ctx.ellipse(x, sea + 9, 30, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = '#0c0616';
+      const fx = x - this.dir * 4;
+      ctx.beginPath(); ctx.moveTo(fx - this.dir * 8, sea); ctx.lineTo(fx + this.dir * 5, sea - 11); ctx.lineTo(fx + this.dir * 6, sea); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#6a4ca8'; ctx.fillRect(fx + this.dir * 4, sea - 10, 1, 3);
+      if (this.state === 'ripple' || this.state === 'sing') {
+        ctx.strokeStyle = 'rgba(150,120,220,0.7)'; ctx.lineWidth = 1;
+        for (let i = 0; i < 3; i++) {
+          const r = ((this.t * 0.6 + i * 8) % 24) + 4;
+          ctx.beginPath(); ctx.ellipse(x, sea, r, r * 0.25, 0, Math.PI, Math.PI * 2); ctx.stroke();
+        }
+      }
+      return;
+    }
+    // out of the sea: the whole whale
+    const y = Math.round(this.y - cy), s = this.scale, d = this.state === 'breach' ? this.dir : this.dir;
+    const white = this.flash > 0 && (this.flash >> 1) % 2;
+    const flop = this.state === 'beached' ? Math.sin(this.animT * 0.25) * 2 : 0;
+    ctx.save(); ctx.globalAlpha = this.alpha;
+    ctx.translate(x, y - 12 * s); ctx.scale(d * s, s);
+    if (this.state === 'breach') ctx.rotate((this.t / 56 - 0.5) * 0.6);
+    ctx.fillStyle = white ? '#ffffff' : '#0e0818';
+    ctx.beginPath(); ctx.ellipse(0, 0, 30, 11, 0, 0, Math.PI * 2); ctx.fill();                    // body
+    ctx.beginPath(); ctx.moveTo(-26, -2); ctx.lineTo(-44, -10 + flop); ctx.lineTo(-40, 0); ctx.lineTo(-46, 8 - flop); ctx.lineTo(-26, 4); ctx.closePath(); ctx.fill();   // flukes
+    ctx.beginPath(); ctx.moveTo(4, 6); ctx.lineTo(-6, 16 + flop); ctx.lineTo(-10, 8); ctx.closePath(); ctx.fill();              // flipper
+    ctx.fillStyle = white ? '#ffffff' : '#2a1a48';
+    ctx.beginPath(); ctx.ellipse(4, 4, 22, 5, 0, 0, Math.PI); ctx.fill();                           // pale belly grooves
+    ctx.fillStyle = '#5a3c98'; for (let i = -10; i < 22; i += 4) ctx.fillRect(i, 6, 2, 1);
+    ctx.strokeStyle = this.state === 'die' ? '#ffe9a8' : '#6a4ca8'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.ellipse(0, 0, 30, 11, 0, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();    // a lit rim along the back
+    ctx.fillStyle = '#ffe9a8'; ctx.fillRect(18, -2, 2, 2);                                         // its eye
+    ctx.restore();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The great shadow, asleep at the bottom of the valley: a child's shape hugging
+// its knees, far too big. It wakes, looks at her, stands, and goes (up and away).
+class Ookage {
+  constructor(x, y) { this.x = x; this.y = y; this.state = 'sleep'; this.t = 0; this.k = 0; this.alpha = 1; }
+  update() {
+    this.t++;
+    if (this.state === 'wake') this.k = Math.min(1, this.k + 1 / 120);
+    if (this.state === 'go') { this.y -= 2.2; this.x += 1.4; this.alpha = Math.max(0, this.alpha - 1 / 150); }
+  }
+  draw(ctx, cx, cy) {
+    if (this.alpha <= 0) return;
+    const x = Math.round(this.x - cx), y = Math.round(this.y - cy), k = this.k;
+    const breathe = this.state === 'sleep' ? Math.sin(this.t * 0.03) * 2 : 0;
+    ctx.save(); ctx.globalAlpha = this.alpha * 0.92;
+    ctx.fillStyle = '#07030e';
+    // curled up (k=0) -> standing (k=1)
+    const bodyH = lerp(56, 120, k), bodyW = lerp(64, 40, k);
+    ctx.beginPath(); ctx.ellipse(x, y - bodyH / 2 + breathe, bodyW / 2, bodyH / 2, 0, 0, Math.PI * 2); ctx.fill();
+    const hy = y - bodyH - lerp(-8, 18, k) + breathe;
+    ctx.beginPath(); ctx.ellipse(x + lerp(14, 0, k), hy, 18, 20, 0, 0, Math.PI * 2); ctx.fill();         // head
+    // long hair, down the back, stirring
+    ctx.beginPath(); ctx.moveTo(x + lerp(0, -14, k), hy - 10);
+    for (let i = 0; i <= 8; i++) ctx.lineTo(x - lerp(20, 22, k) - Math.sin(this.t * 0.05 + i) * 3, hy + i * lerp(6, 11, k));
+    ctx.lineTo(x - 4, hy + 40); ctx.closePath(); ctx.fill();
+    // eyes: two faint yellow points, open when it wakes
+    if (this.state !== 'sleep') {
+      ctx.fillStyle = `rgba(255,233,168,${0.4 + 0.6 * k})`;
+      ctx.fillRect(x + lerp(14, 0, k) - 6, Math.round(hy), 2, 2); ctx.fillRect(x + lerp(14, 0, k) + 4, Math.round(hy), 2, 2);
+    }
+    ctx.restore();
+    if (this.state === 'sleep' && this.t % 90 < 45) { ctx.fillStyle = '#6a58a0'; ctx.font = '8px sans-serif'; ctx.fillText('…', x + 24, y - 70); }
+  }
+}

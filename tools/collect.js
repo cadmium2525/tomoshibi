@@ -84,6 +84,15 @@ window.collectTest = function (only = null) {
     },
     c4f4: () => { start(4); tp(103, 24, 101.5); hop(102.6); hop(103.3); walk(103.4); },
     c4f5: () => { start(4); game.bossDone = true; tp(80, 24, 78); walk(73.5); for (let i = 0; i < 6; i++) hop(74.6); walk(78.5); },
+    // ---- chapter 5
+    c5f1: () => { start(5); tp(43.6, 16, 44.3); run(10); walk(48.5); land(); run(4, ['ArrowDown']); land(); walk(62); },
+    c5j1: () => { start(5); tp(87, 22, 81); run(10); walk(91); land(); walk(103); },
+    c5f2: () => { start(5); tp(187, 26, 186.2); run(20); hop(188.6); walk(189.2); },
+    c5f3: () => { start(5); tp(271.5, 26, 272.4); run(10); walk(275); land(); walk(269.2); },
+    c5j2: () => { start(5); tp(317, 34, 316.2); jump(); },
+    c5f4: () => { start(5); game.bossDone = true; tp(386.5, 42, 385.5); jump(-1); },
+    c5f5: () => { start(5); tp(398, 38, 397.2); jump(); },
+    c5j3: () => { start(5); tp(407, 34, 406.2); jump(); },
     c4j3: () => { start(4); game.bossDone = true; tp(80, 24, 78); walk(73.5); for (let i = 0; i < 6; i++) hop(74.6); walk(78.5); walk(79.3); hop(82.4); walk(83.4); },
   };
   const out = [];

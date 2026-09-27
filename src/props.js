@@ -372,7 +372,7 @@ class Collapse {
     this.t++;
     const hero = game.hero;
     // eases in, then keeps a steady pace a little slower than a dash
-    this.speed = Math.min(2.15, this.speed + 0.02);
+    this.speed = Math.min(CHAPTERS[game.chapter].escapeSpeed || 2.15, this.speed + 0.02);
     const gap = hero.x - this.x;
     this.x += this.speed + (gap > 230 ? 1.2 : 0);           // never falls hopelessly behind
     if (this.style === 'guards') {                 // the whole watch, running with bells ringing
@@ -734,5 +734,24 @@ class Wheel {
       ctx.fillStyle = '#1a1014'; ctx.fillRect(px - 1, py - 1, 34, 8);
       ctx.fillStyle = '#6a4a30'; ctx.fillRect(px, py, 32, 5); ctx.fillStyle = '#b08a50'; ctx.fillRect(px, py, 32, 1);
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Chapter 5: one of the shadow plays on the cave wall (a child's hands against a
+// lamp): drawn with the current fill, standing on (x, y).
+function drawPlayShape(ctx, kind, x, y, seed) {
+  const R = (dx, dy, w, h) => ctx.fillRect(Math.round(x + dx), Math.round(y + dy), w, h);
+  switch (kind) {
+    case 'rabbit':                                   // two long ears, a round head, a paw
+      R(-5, -4, 10, 4); R(-3, -7, 6, 3); R(-2, -12, 2, 5); R(1, -12, 2, 6); R(5, -3, 2, 3); break;
+    case 'bird':                                     // wings out
+      R(-2, -6, 4, 3); R(-10, -8, 8, 2); R(2, -8, 8, 2); R(-12, -10, 3, 2); R(9, -10, 3, 2); R(2, -5, 3, 1); break;
+    case 'fox':                                      // pointed snout, two ears
+      R(-6, -5, 9, 5); R(3, -4, 5, 2); R(-5, -8, 2, 3); R(-1, -8, 2, 3); R(-6, 0, 2, 1); break;
+    case 'whale':                                    // a long body, a tail up
+      R(-9, -5, 15, 5); R(6, -4, 3, 3); R(-12, -8, 3, 4); R(-13, -9, 2, 2); R(-10, -9, 2, 2); break;
+    default:                                         // two figures hand in hand: a tall one and a small one
+      R(-7, -12, 3, 3); R(-8, -9, 5, 9); R(3, -8, 3, 3); R(2, -5, 5, 5); R(-3, -6, 5, 1); break;
   }
 }
