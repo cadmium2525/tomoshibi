@@ -57,7 +57,7 @@ window.autoplay5 = function (upTo = null, from = null) {
   function fight(until = () => false, leash = 0, max = 8000) {
     let n = 0;
     while (n++ < max) {
-      const alive = game.shadows.filter((s) => s.alive && s.state !== 'die' && s.state !== 'wander' && Math.abs(s.y - H().y) < 5 * 16 && Math.abs(s.x - H().x) < 240);
+      const alive = game.shadows.filter((s) => s.alive && s.state !== 'die' && s.state !== 'wander' && (Math.abs(s.y - H().y) < 5 * 16 || Y().carriedBy === s) && Math.abs(s.x - H().x) < 240);
       const amb = game.ambushes.some((a) => a.wave >= 0 && !a.done);
       if (!alive.length && !amb && !until()) break;
       const s = alive.filter((s) => s.state !== 'emerge').sort((a, b) => Math.abs(a.x - H().x) - Math.abs(b.x - H().x))[0];
@@ -180,7 +180,8 @@ window.autoplay5 = function (upTo = null, from = null) {
     const near = game.shadows.filter((s) => s.alive && s.state !== 'die' && s.state !== 'emerge').sort((a, b) => Math.abs(a.x - H().x) - Math.abs(b.x - H().x))[0];
     const inTrench = H().y > 43 * 16;
     if (Y().carriedBy === W) at(W.x, true);
-    else if (Y().state === 'carried' && !inTrench) at(Y().carriedBy.x, true);
+    else if (Y().state === 'carried') at(Y().carriedBy.x, true);
+    else if (near && Math.abs(near.x - Y().x) < 90 && W.state !== 'beached') at(near.x, true);   // a shadow child going for her first
     else if (W.state === 'beached') {
       if (H().y < W.y - 16 && game.onPole(H()) && Math.abs(H().x - W.x) < 40) keys.push('ArrowDown');   // down off the jetty onto it
       else at(W.x + (H().x < W.x ? -26 : 26), true);

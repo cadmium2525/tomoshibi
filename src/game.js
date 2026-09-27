@@ -87,7 +87,7 @@ class Game {
     this.poles = []; this.sanctuaries = [];
     this.pedestals = []; this.mirrors = []; this.receptors = []; this.lifts = []; this.wheels = []; this.beams = [];
     this.logbook = null; this.bossSpot = null; this.boss = null; this.bossDone = false; this.greatLamp = null; this.moth = null;
-    this.whaleSpot = null; this.whale = null; this.ookage = null; this.playwall = null; this.ring = 0;
+    this.whaleSpot = null; this.whale = null; this.curtain = null; this.ookage = null; this.playwall = null; this.ring = 0;
     this.flicker = false; this.flickT = 0;
     this.guards = []; this.lamps = []; this.fear = 0; this.fearCd = 0; this.nooks = []; this.martaSpot = null; this.npcSpots = [];
     this.darks = (stage.darks || []).map(([x0, y0, x1, y1]) => ({ x0: x0 * TILE, y0: y0 * TILE, x1: (x1 + 1) * TILE, y1: (y1 + 1) * TILE }));
@@ -115,7 +115,11 @@ class Game {
         case 'lamp': this.lamps.push(new Lamp(e)); break;
         case 'pole': this.poles.push(new Pole(e)); break;
         case 'villager': { const p = new Portal(e.x, e.y); this.portals.push(p); this.shadows.push(new Villager(p, e)); break; }
-        case 'whale': this.whaleSpot = { x: e.x, y: e.y, x0: e.x0 * TILE, x1: (e.x1 + 1) * TILE, sea: e.sea * TILE, floor: e.y + 3 * TILE }; break;
+        case 'whale': {
+          const B = this.whaleSpot = { x: e.x, y: e.y, x0: e.x0 * TILE, x1: (e.x1 + 1) * TILE, sea: e.sea * TILE, floor: e.y + 3 * TILE };
+          this.curtain = { solidBox: () => (this.bossDone ? null : { x0: B.x1, x1: B.x1 + TILE, y0: B.y - 8 * TILE, y1: B.y }) };
+          break;
+        }
         case 'ookage': this.ookage = new Ookage(e.x, e.y); break;
         case 'playwall': this.playwall = { x: e.x, y: e.y, x0: e.x0 * TILE, y0: e.y0 * TILE, done: false }; break;
         case 'pedestal': { const p = new Pedestal(e); p.turnable = !!e.turn; this.pedestals.push(p); break; }
@@ -144,6 +148,7 @@ class Game {
     this.world.dyn = [...this.gates, ...this.blocks, ...this.crumbles, ...this.bridges, ...this.rocks, ...this.markers];
     if (this.mist) this.world.dyn.push(this.mist);
     this.world.dyn.push(...this.poles, ...this.lifts);
+    if (this.curtain) this.world.dyn.push(this.curtain);        // (chapter 5: no way past the whale until it is at peace)
     for (const w of this.wheels) this.world.dyn.push(...w.plats);
     if (cp) {
       for (const l of this.levers) if (cp.levers.includes(l.id)) { l.on = true; }
@@ -1149,7 +1154,7 @@ class Game {
   whaleCall() {
     const B = this.whaleSpot;
     if (this.shadows.some((s) => s.alive && s.state !== 'die')) return;
-    this.spawnShadow(B.x1 + TILE, B.y);           // from the far side: it has to cross the sea to her
+    this.spawnShadow(358.5 * TILE, B.y);           // from the rock in the middle: it has to cross the sea to her
   }
   updateWhale() {
     const B = this.whaleSpot, hero = this.hero;
@@ -1163,6 +1168,7 @@ class Game {
       return false;
     }
     this.whale.update(this);
+    this.whale.updateDrops(this);
     if (this.state !== 'play') return true;
     if (!this.whale.alive) {
       this.whale = null; this.bossDone = true; this.ring = 0;
@@ -1309,7 +1315,7 @@ class Game {
     for (let i = 0; i < 20; i++) hero.trail.push({ x: h.x + (hero.x - h.x) * i / 19, y: hero.y });
     hero.lastSafe = { x: hero.x, y: hero.y };
     this.escape = true;
-    this.collapse = new Collapse(e.x - 110, e.y, CHAPTERS[this.chapter].pursuit || 'rubble');
+    this.collapse = new Collapse(e.x - (CHAPTERS[this.chapter].escapeLead || 110), e.y, CHAPTERS[this.chapter].pursuit || 'rubble');
     this.pathLog = [{ x: e.x - 200, y: e.y, g: true }, { x: hero.x, y: hero.y, g: true }];
     for (const n of [...this.npcs]) this.removeNpc(n.key);
     this.heroine.hooded = false;
@@ -1576,6 +1582,13 @@ class Game {
     }
     if (h.state === 'carried' && !h.carriedBy) h.draw(ctx, cx, cy);
     if (this.ookage) this.ookage.draw(ctx, cx, cy);
+    if (this.whaleSpot && !this.bossDone && this.whale) {    // the curtain of shadow
+      const B = this.whaleSpot, x = Math.round(B.x1 - cx), y0 = Math.round(B.y - 8 * TILE - cy);
+      for (let i = 0; i < 8 * TILE; i += 2) {
+        const w = 10 + Math.sin(i * 0.3 + this.t * 0.08) * 3;
+        ctx.fillStyle = `rgba(14,8,26,${0.55 + 0.3 * Math.sin(i * 0.5 + this.t * 0.05)})`; ctx.fillRect(x + 8 - w / 2, y0 + i, w, 2);
+      }
+    }
     if (this.whale) {
       this.whale.draw(ctx, cx, cy);
       if (h.carriedBy === this.whale) drawSprite(ctx, 'heroine', h.frame(), h.x - cx, h.y - cy, h.facing < 0, { clipBottom: this.whale.sea + 4 - cy });

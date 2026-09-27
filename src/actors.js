@@ -20,6 +20,7 @@ class Hero extends Body {
     this.t++;
     if (this.attackCd > 0) this.attackCd--;
     if (this.flash > 0) this.flash--;
+    if (this.pain > 0) this.pain = Math.max(0, this.pain - 1 / 360);    // blows add up, then wear off
     if (this.landT > 0) this.landT--;
     if (this.takeoff > 0) this.takeoff--;
     if (this.dropT > 0) this.dropT--;
@@ -115,8 +116,9 @@ class Hero extends Body {
         if (this.t >= 42) this.state = 'normal';
         break;
       case 'hurt':
-        this.vx = approach(this.vx, 0, 0.06);
-        if (this.t >= 26 && this.onGround) this.state = 'normal';
+        this.vx = approach(this.vx, 0, this.downed && this.onGround ? 0.2 : 0.06);
+        if (this.t >= (this.downed ? 120 : 26) && this.onGround) { this.state = 'normal'; this.downed = false; }
+        if (this.downed && this.t > 30 && this.t % 16 === 0) game.particles.add({ x: this.x + rand(-6, 6), y: this.y - 34, vy: -0.3, life: 30, col: '#ffe08a', size: 1 });
         break;
       case 'fallout':
         this.vx = 0; this.vy = 0;
@@ -146,7 +148,15 @@ class Hero extends Body {
   knock(dir) {
     if (['hurt', 'fallout', 'catch', 'catchwait', 'pull', 'scripted'].includes(this.state)) return;
     if (this.held) game.dropHeld(this);
-    this.state = 'hurt'; this.t = 0; this.vx = dir * 2.3; this.vy = -2.4; this.flash = 30;
+    this.pain = (this.pain || 0) + 1;
+    this.state = 'hurt'; this.t = 0; this.flash = 30;
+    if (this.pain >= 3) {
+      // the third blow in a short while: thrown down hard, and slow to get up again
+      this.pain = 0; this.downed = true;
+      this.vx = dir * 3.4; this.vy = -3.6;
+      game.shake = Math.max(game.shake, 5);
+      game.say(this, 'ぐっ……！', 'hero', 70);
+    } else { this.vx = dir * 2.3; this.vy = -2.4; }
     Sfx.play('hit');
   }
 
@@ -189,7 +199,13 @@ class Hero extends Body {
     if (this.flash > 0 && this.state !== 'hurt' && (this.flash >> 2) % 2) return;
     const x = this.x - cx, y = this.y - cy;
     const white = this.state === 'hurt' && this.t < 6;
-    drawSprite(ctx, 'hero', this.frame(), x, y, this.facing < 0, white ? { white: true } : null);
+    if (this.downed && this.state === 'hurt' && this.onGround) {
+      // flat on the ground, getting up at the end
+      const up = clamp((this.t - 96) / 24, 0, 1);
+      ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.rotate((this.facing < 0 ? 1 : -1) * (1 - up) * Math.PI / 2 * 0.92);
+      drawSprite(ctx, 'hero', this.frame(), 0, 0, this.facing < 0);
+      ctx.restore();
+    } else drawSprite(ctx, 'hero', this.frame(), x, y, this.facing < 0, white ? { white: true } : null);
     if (this.state === 'attack') this.drawCane(ctx, cx, cy);
     if (this.held) { const p = this.heldPos(); drawTile(ctx, 'block', Math.round(p.x - 8 - cx), Math.round(p.y - 16 - cy)); }
   }
@@ -652,6 +668,14 @@ class Shadow extends Body {
         const dx = this.portal.x - this.x;
         this.facing = sign(dx) || this.facing;
         if (Math.abs(dx) < 2) { this.x = this.portal.x; this.setState('sink'); this.vx = 0; break; }
+        // can't get back to its pool (a step, a ditch): it opens one where it stands
+        this.stall = Math.abs(this.x - (this.lastX ?? this.x)) < 0.05 ? (this.stall || 0) + 1 : 0;
+        this.lastX = this.x;
+        if (this.stall > 60 && this.onGround) {
+          const p = new Portal(this.x, this.y); game.portals.push(p);
+          this.portal.users--; this.portal = p; p.users++;
+          this.stall = 0; this.setState('sink'); this.vx = 0; break;
+        }
         this.walk(game, this.facing, 0.42);
         break;
       }
@@ -1276,9 +1300,13 @@ class Whale {
     this.x = B.x0 + 4 * TILE; this.y = this.sea + 10; this.dir = 1;
     this.state = 'rise'; this.t = 0; this.animT = 0; this.hp = 12; this.hits = 0; this.phase = 1;
     this.flash = 0; this.alive = true; this.alpha = 1; this.scale = 1; this.singT = 0; this.offSea = 0; this.again = false;
+    this.spitT = 0; this.slapT = 0; this.drops = [];
   }
   setState(s) { this.state = s; this.t = 0; }
-  P() { return [null, { speed: 1.1, ripple: 55, beach: 240 }, { speed: 1.4, ripple: 45, beach: 210 }, { speed: 1.7, ripple: 36, beach: 180 }][Math.min(3, this.phase)]; }
+  P() {
+    return [null, { speed: 1.1, ripple: 55, beach: 240, spit: 540, snap: 100 }, { speed: 1.4, ripple: 45, beach: 210, spit: 440, snap: 80 },
+      { speed: 1.7, ripple: 36, beach: 180, spit: 360, snap: 65 }][Math.min(3, this.phase)];
+  }
   seaAt(game, x) {                                   // is there shadow sea (set, not dried up) at x?
     const w = game.world, tx = Math.floor(x / TILE), ty = Math.floor(this.sea / TILE);
     return w.soft && w.soft[ty * w.W + tx] === 1 && w.softOn[ty * w.W + tx] === 1;
@@ -1287,6 +1315,7 @@ class Whale {
   hurtBox() {
     if (this.state === 'beached') return { x0: this.x - 30, x1: this.x + 30, y0: this.y - 24, y1: this.y };
     if (this.state === 'drag') return { x0: this.x - 22, x1: this.x + 22, y0: this.sea - 20, y1: this.sea + 4 };
+    if (this.state === 'haul') return { x0: this.x - 30, x1: this.x + 30, y0: this.y - 24, y1: this.y };
     return null;
   }
   // under the sea, one step toward x (never through dried-up sea)
@@ -1328,7 +1357,18 @@ class Whale {
           const s = this.nearestSea(game, hero.x);
           if (s !== null) this.swimTo(game, s + Math.sin(this.t * 0.02) * 24, P.speed * 0.6);
         }
-        if (this.phase >= 2 && ++this.singT > 540 && this.state === 'swim') { this.singT = 0; this.setState('sing'); }
+        if (this.phase >= 2 && ++this.singT > 540 && this.state === 'swim') { this.singT = 0; this.setState('sing'); break; }
+        // her light keeps it off: it spits a gob of shadow at her (a shadow child where it lands)
+        if (++this.spitT > P.spit && h.state === 'normal' && !h.hooded && !game.shadows.some((s) => s.alive && s.state !== 'die') && !this.drops.length) {
+          this.spitT = 0; Sfx.play('swing');
+          this.drops.push({ x: this.x, y: this.sea - 4, vx: (h.x - this.x) / 70, vy: -3.2, t: 0 });
+        }
+        // Grey on the jetty, out of its reach: a slap of the tail and a wave over the boards
+        if (++this.slapT > 200 && game.onPole(hero) && Math.abs(hero.x - this.x) < 56) {
+          this.slapT = 0; Sfx.play('drop'); game.shake = 3;
+          for (let i = 0; i < 14; i++) game.particles.add({ x: this.x + rand(-10, 10), y: this.sea, vx: sign(hero.x - this.x) * rand(0.5, 2), vy: rand(-3, -1), g: 0.12, life: 36, col: i % 2 ? '#3a2466' : '#8a70c8', size: 2 });
+          if (Math.abs(hero.x - this.x) < 48) hero.knock(sign(hero.x - this.x) || 1);
+        }
         if (this.t % 20 === 0) bubble(this.x);
         break;
       }
@@ -1371,10 +1411,30 @@ class Whale {
         }
         break;
       }
-      case 'beached':
+      case 'beached': {
         this.y = this.groundBelow(game, this.x, this.y - 8);
+        const near = h.grabbable() && !h.carriedBy && Math.abs(h.x - this.x) < 44 && Math.abs(h.y - this.y) < 40;
+        if (near && this.t === 20) { h.emote('!', 60); game.say(h, 'こっちに くる……！', 'cry', 60); }
+        if (near && this.t >= P.snap) {               // it lunges and takes her in its mouth
+          h.carriedBy = this; h.setState('carried'); h.mode = 'follow';
+          this.setState('haul'); Sfx.play('grab'); game.stats.grabs++;
+          break;
+        }
         if (this.t > P.beach) this.setState('back');
         break;
+      }
+      case 'haul': {                                  // off into the dark with her (hit it to make it let go)
+        // (her own light dries the sea around them: it wriggles away over the ground instead)
+        const away = sign(this.x - hero.x) || this.dir;
+        this.dir = away;
+        const nx = this.x + away * 0.5;
+        if (!game.world.pointSolid(nx + away * 20, this.y - 8)) this.x = nx;
+        this.y = this.groundBelow(game, this.x, this.y - 8);
+        if (this.t % 10 === 0) game.particles.add({ x: this.x + rand(-20, 20), y: this.y - 4, vy: -0.5, life: 24, col: '#3a2466', size: 2 });
+        this.alpha = this.t > 130 ? Math.max(0, 1 - (this.t - 130) / 40) : 1;
+        if (this.t > 170) { game.gameOver(); return; }
+        break;
+      }
       case 'back': {                                  // wriggles off into the dark, comes up in the sea
         this.alpha = Math.max(0, 1 - this.t / 30);
         if (this.t >= 30) {
@@ -1409,11 +1469,12 @@ class Whale {
     }
     return null;
   }
-  carryOff() { return [0, 12]; }
+  get facing() { return this.dir; }            // (she hangs from its mouth, on the side it faces)
+  carryOff() { return this.state === 'haul' ? [22, -2] : [0, 12]; }
   hit(game, dir) {
-    if (this.state === 'drag') {
+    if (this.state === 'drag' || this.state === 'haul') {
       const h = game.heroine;
-      h.carriedBy = null; h.setState('down'); h.y = this.sea; h.vy = -3; h.vx = -dir * 0.8; h.flash = 20;
+      h.carriedBy = null; h.setState('down'); if (this.state === 'drag') h.y = this.sea; h.vy = -3; h.vx = -dir * 0.8; h.flash = 20;
       game.say(h, 'きゃっ…！', 'her', 40); Sfx.play('drop');
       this.flash = 10; this.setState('back'); Sfx.play('hit');
       return true;
@@ -1432,7 +1493,18 @@ class Whale {
     if (this.hits >= 3) this.setState('back');
     return true;
   }
+  // gobs of shadow in flight: where one lands a shadow child comes up
+  updateDrops(game) {
+    for (const d of this.drops) {
+      d.t++; d.x += d.vx; d.y += d.vy; d.vy += 0.1;
+      if (d.t % 3 === 0) game.particles.add({ x: d.x, y: d.y, vy: -0.2, life: 16, col: '#3a2058', size: 2, shrink: true });
+      if (d.t > 10 && game.world.pointSolid(d.x, d.y + 2)) { d.done = true; game.spawnShadow(d.x, Math.floor((d.y + 2) / TILE) * TILE); }
+      if (d.t > 200) d.done = true;
+    }
+    this.drops = this.drops.filter((d) => !d.done);
+  }
   draw(ctx, cx, cy) {
+    for (const d of this.drops) { ctx.fillStyle = '#0e0818'; ctx.beginPath(); ctx.arc(Math.round(d.x - cx), Math.round(d.y - cy), 4, 0, Math.PI * 2); ctx.fill(); }
     const x = Math.round(this.x - cx), sea = Math.round(this.sea - cy);
     if (['rise', 'swim', 'ripple', 'drag', 'sing'].includes(this.state)) {
       // under the sea: a dark shape, its fin cutting the surface, rings of ripples
@@ -1455,7 +1527,7 @@ class Whale {
     // out of the sea: the whole whale
     const y = Math.round(this.y - cy), s = this.scale, d = this.state === 'breach' ? this.dir : this.dir;
     const white = this.flash > 0 && (this.flash >> 1) % 2;
-    const flop = this.state === 'beached' ? Math.sin(this.animT * 0.25) * 2 : 0;
+    const flop = this.state === 'beached' || this.state === 'haul' ? Math.sin(this.animT * (this.state === 'haul' ? 0.5 : 0.25)) * 2 : 0;
     ctx.save(); ctx.globalAlpha = this.alpha;
     ctx.translate(x, y - 12 * s); ctx.scale(d * s, s);
     if (this.state === 'breach') ctx.rotate((this.t / 56 - 0.5) * 0.6);

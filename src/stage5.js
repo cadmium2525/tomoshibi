@@ -182,7 +182,7 @@ const CH5_TEXT = {
 };
 
 CHAPTERS[5] = {
-  num: 5, title: '影の谷', theme: 'valley', build: buildStage5, hood: true, escapeSpeed: 1.7,
+  num: 5, title: '影の谷', theme: 'valley', build: buildStage5, hood: true, escapeSpeed: 1.45, escapeLead: 170,
   escapeScript: (retry) => valleyEscapeScript(retry),
   text: CH5_TEXT, shards: CH5_SHARDS, pages: CH5_PAGES,
   clearQuote: '「大きな影は、王城へ……」<br>「……おかあさまの ところへ？」',
