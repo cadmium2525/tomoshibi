@@ -110,7 +110,8 @@ cd tools && python build_assets.py
 - 第3章「消灯の街」の手直し（遊んでもらった感想から）。設計は `docs/CHAPTER3.md`
 - 第4章「灯守りの塔」の手直し（遊んでもらった感想から）。設計は `docs/CHAPTER4.md`
 - 第5章「影の谷」の手直し（遊んでもらった感想から）。設計は `docs/CHAPTER5.md`
-- 第6章「宵の王城」の設計（最終章：女王との対面、大影との決戦、エピローグ）
+- 第6章「宵の王城」の手直し（遊んでもらった感想から）。設計は `docs/CHAPTER6.md`
+- 第6章の決着の一枚絵を `assets/story/finale.webp` に置く（プロンプトは `docs/PROMPT_ch6_finale.md`。置いたら `sw.js` の一覧にも足す）
 - 収集物の置き方を見直す：本道から枝分かれした寄り道（仕掛けを使って行く脇道・隠し部屋）の先に置く。第3章以降はこの形で作り、第1・2章も後で直す
 - ハードモード（最後の章まで作ってから）：セーブは章クリア時だけ、敵の体力を増やす、防衛戦を長くする など
 - 第1章をさらに区画ごとに作り込み、初見で15分前後に（今は 牢と回廊 → 縦穴 → 奈落の回廊 → 大階段 → 石像の間 → 脆き橋 → 光の橋 → 大広間 → 崩落からの逃走）
@@ -119,5 +120,5 @@ cd tools && python build_assets.py
 ## テスト用
 
 - `python tools/devserver.py 8932` → `http://localhost:8932/?debug` で開くと `T.run(frames, keys)` などのデバッグ関数が使える
-- `tools/autoplay.js` を読み込んで `autoplay()` を実行すると、第1章をスタートからクリアまで自動でプレイして検証する（第2章は `tools/autoplay2.js` の `autoplay2()`、第3章は `tools/autoplay3.js` の `autoplay3()`、第4章は `tools/autoplay4.js` の `autoplay4()`、第5章は `tools/autoplay5.js` の `autoplay5()`）
+- `tools/autoplay.js` を読み込んで `autoplay()` を実行すると、第1章をスタートからクリアまで自動でプレイして検証する（第2章は `tools/autoplay2.js` の `autoplay2()`、第3章は `tools/autoplay3.js` の `autoplay3()`、第4章は `tools/autoplay4.js` の `autoplay4()`、第5章は `tools/autoplay5.js` の `autoplay5()`、第6章は `tools/autoplay6.js` の `autoplay6()`）
 - `tools/collect.js` を読み込んで `collectTest()` を実行すると、全章の収集物（影絵の欠片・灯守りの手記）を1つずつ実際に取りに行き、取れるかを確かめる。収集物を置いたり地形を変えたりしたら必ず実行する

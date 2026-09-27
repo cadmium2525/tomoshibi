@@ -538,7 +538,9 @@ class Lamp {
     if (this.by && !['investigate', 'snuff'].includes(this.by.state)) { if (this.by.lamp === this) this.by.lamp = null; this.by = null; }
     if (!this.by || this.by.state !== 'snuff') this.dying = 0;
     const h = game.heroine;
-    if (!this.lit && !h.hooded && h.onGround && h.state === 'normal' && Math.abs(h.x - this.x) < 10 && Math.abs(h.y - this.y) < 4) {
+    const hero = game.hero;
+    const byFlame = game.fire && hero.state === 'attack' && Math.abs(hero.x + hero.facing * 14 - this.x) < 18 && Math.abs(hero.y - this.y) < 12;
+    if (!this.lit && (byFlame || !h.hooded && h.onGround && h.state === 'normal' && Math.abs(h.x - this.x) < 10 && Math.abs(h.y - this.y) < 4)) {
       this.lit = true; Sfx.play('save');
       game.particles.burst(this.x, this.y - 42, 10, { col: '#ffe0a0', life: 24, max: 1 });
     }
@@ -753,5 +755,104 @@ function drawPlayShape(ctx, kind, x, y, seed) {
       R(-9, -5, 15, 5); R(6, -4, 3, 3); R(-12, -8, 3, 4); R(-13, -9, 2, 2); R(-10, -9, 2, 2); break;
     default:                                         // two figures hand in hand: a tall one and a small one
       R(-7, -12, 3, 3); R(-8, -9, 5, 9); R(3, -8, 3, 3); R(2, -5, 5, 5); R(-3, -6, 5, 1); break;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Chapter 6: the castle.
+// A candelabra: lit by Lumina's light (like a street lamp - and the watch puts it
+// out again, see Guard) or, once Grey's pole burns again, by a touch of its flame.
+class Candle extends Lamp {
+  constructor(e) { super(e); this.fixed = !!e.fixed; if (e.lit || this.fixed) this.lit = true; }
+  update(game) {
+    super.update(game);
+    if (this.fixed) this.lit = true;
+  }
+  lightPos() { return { x: this.x, y: this.y - 28 }; }
+  draw(ctx, cx, cy) { drawTile(ctx, this.lit && !this.flick() ? 'candle_on' : 'candle_off', Math.round(this.x - 8 - cx), Math.round(this.y - 32 - cy)); }
+  light() {
+    if (!this.lit) return null;
+    const k = 1 - 0.7 * (this.dying || 0);
+    return { x: this.x, y: this.y - 28, r: (92 + Math.sin(this.t * 0.25) * 2) * k, a: 0.9 * (this.flick() ? 0.4 : 1), col: `rgba(255,190,100,${0.16 * k})` };
+  }
+}
+
+// An iron ring in the wall that only a shadow can move: Lumina's shadow, thrown
+// on the wall by a lit candelabra, has to cover it - at the right size (near the
+// flame her shadow is big and reaches high; far from it, small enough for a slit).
+class ShadowLatch extends Lever {
+  constructor(e) { super(e); this.min = e.min || 0; this.max = e.max || 99; this.hold = 0; }
+  near() { return false; }                          // (no hand can turn it)
+  pull(game) {
+    if (this.on) return;
+    this.on = true; Sfx.play('lever'); game.shake = 3;
+    for (const g of game.gates) if (this.gateIds.includes(g.id)) g.locked = true;
+    for (const b of game.bridges) if (this.gateIds.includes(b.id)) b.locked = true;
+    game.particles.burst(this.x, this.y - 8, 12, { col: '#b090ff', life: 24, max: 1.2 });
+    game.say(game.heroine, 'わたしの 影が……うごかした？', 'her', 90);
+  }
+  update(game) {
+    if (this.on) return;
+    const S = game.lshadow;
+    const touch = S && S.s >= this.min && S.s <= this.max && Math.abs(this.x - S.x) < 6 * S.s + 6 && this.y - 8 > S.y - 30 * S.s && this.y - 8 < S.y;
+    this.hold = touch ? this.hold + 1 : 0;
+    if (this.hold > 20) this.pull(game);
+  }
+  draw(ctx, cx, cy) { drawTile(ctx, this.on ? 'latch_on' : 'latch_off', Math.round(this.x - 8 - cx), Math.round(this.y - 16 - cy)); }
+}
+
+// 影の帳: a curtain of dark across a passage. Light on one side alone does nothing;
+// lit from both sides at once it thins away and anyone can walk through.
+class Veil {
+  constructor(e) { this.id = e.id; this.x = e.x; this.y = e.y; this.h = (e.h || 4) * TILE; this.thin = 0; this.t = 0; }
+  sources(game) {
+    const S = [], h = game.heroine, hero = game.hero;
+    if (!h.hooded && h.state !== 'carried') S.push({ x: h.x, y: h.y });
+    if (game.fire) S.push({ x: hero.x, y: hero.y });
+    for (const L of game.lamps) if (L.lit) S.push({ x: L.x, y: L.y });
+    return S.filter((p) => Math.abs(p.y - this.y) < 40 && Math.abs(p.x - this.x) < 140);
+  }
+  update(game) {
+    this.t++;
+    const S = this.sources(game);
+    // (a light inside the veil lights it through from within: it does not close on her)
+    const both = S.some((p) => Math.abs(p.x - this.x) <= 10) || (S.some((p) => p.x < this.x - 6) && S.some((p) => p.x > this.x + 6));
+    this.thin = both ? Math.min(1, this.thin + 1 / 40) : Math.max(0, this.thin - 1 / 25);
+    if (both && this.thin === 1 && !this.said) { this.said = true; game.say(game.hero, '……二つの光で、影が 薄れた。', 'hero', 100); }
+  }
+  solidBox() { return this.thin >= 1 ? null : { x0: this.x - 5, x1: this.x + 5, y0: this.y - this.h, y1: this.y }; }
+  draw(ctx, cx, cy) {
+    const x = Math.round(this.x - cx), y0 = Math.round(this.y - this.h - cy);
+    for (let i = 0; i < this.h; i += 2) {
+      const w = 18 + Math.sin(i * 0.25 + this.t * 0.06) * 4;
+      const a = (0.92 - 0.8 * this.thin) * (0.85 + 0.15 * Math.sin(i * 0.4 + this.t * 0.04));
+      const x0 = Math.round(x - w / 2 + Math.sin(i * 0.15 + this.t * 0.03) * 2);
+      ctx.fillStyle = `rgba(8,4,16,${a})`; ctx.fillRect(x0, y0 + i, Math.round(w), 2);
+      ctx.fillStyle = `rgba(120,80,200,${0.5 * a})`; ctx.fillRect(x0, y0 + i, 1, 2); ctx.fillRect(x0 + Math.round(w) - 1, y0 + i, 1, 2);
+    }
+    if (this.thin < 1 && this.t % 6 === 0) game.particles.add({ x: this.x + rand(-8, 8), y: this.y - rand(0, this.h), vx: rand(-0.2, 0.2), vy: rand(-0.4, -0.1), life: 30, col: '#2a1a48', size: 2, shrink: true });
+    if (this.thin > 0) { ctx.fillStyle = `rgba(255,230,170,${0.25 * this.thin})`; ctx.fillRect(x - 1, y0, 2, this.h); }
+  }
+}
+
+// 影ぼうし: what the shadow children become - round, small ears, two yellow dots.
+// In the epilogue they hop along at her feet.
+class Kageboshi {
+  constructor(x, y, k) { this.x = x; this.y = y; this.k = k; this.vy = 0; this.t = k * 17; this.gy = y; }
+  update(game) {
+    this.t++;
+    const h = game.heroine, tx = h.x - (12 + this.k * 9) * (h.facing || 1);
+    this.x += clamp(tx - this.x, -1.4, 1.4);
+    this.gy = h.y;
+    if (this.y >= this.gy && this.t % (40 + this.k * 7) === 0) this.vy = -1.6 - (this.k % 2) * 0.4;
+    this.vy += 0.12; this.y = Math.min(this.gy, this.y + this.vy);
+    if (this.y >= this.gy) this.vy = 0;
+  }
+  draw(ctx, cx, cy) {
+    const x = Math.round(this.x - cx), y = Math.round(this.y - cy);
+    ctx.fillStyle = '#1a1030';
+    ctx.beginPath(); ctx.ellipse(x, y - 5, 6, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(x - 5, y - 11, 2, 3); ctx.fillRect(x + 3, y - 11, 2, 3);      // ears
+    ctx.fillStyle = '#ffe9a8'; ctx.fillRect(x - 3, y - 6, 1, 1); ctx.fillRect(x + 2, y - 6, 1, 1);
   }
 }

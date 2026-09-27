@@ -84,6 +84,17 @@ window.collectTest = function (only = null) {
     },
     c4f4: () => { start(4); tp(103, 24, 101.5); hop(102.6); hop(103.3); walk(103.4); },
     c4f5: () => { start(4); game.bossDone = true; tp(80, 24, 78); walk(73.5); for (let i = 0; i < 6; i++) hop(74.6); walk(78.5); },
+    // ---- chapter 6
+    c6f1: () => { start(6); tp(63, 25, 61); hop(64.6); hop(64.8); hop(66.6); walk(69.2); },
+    c6j1: () => { start(6); Y().hooded = false; game.lamps.find((l) => l.id === 'cB').lit = true; tp(95, 34, 97.0); run(40);
+      if (!game.levers.find((l) => l.id === 'lB2').on) throw new Error('the low ring did not turn');
+      tp(86, 34, 95); walk(84.5); for (let i = 0; i < 4; i++) hop(84.5); hop(83.2); walk(83.2); },
+    c6f2: () => { start(6); tp(185, 26, 183); for (let i = 0; i < 4; i++) hop(186.6); hop(188.4); walk(189.2); },
+    c6f3: () => { start(6); game.fire = true; tp(207, 26, 205); for (let i = 0; i < 3; i++) hop(208.6); hop(210.4); walk(213.8); run(60); walk(222); },
+    c6j2: () => { start(6); tp(303.6, 22, 301, 23); for (let i = 0; i < 4; i++) hop(302.8); hop(304.6); walk(307.2); },
+    c6f4: () => { start(6); tp(349, 16, 347); hop(350.6); hop(350.6); walk(351.2); },
+    c6j3: () => { start(6); tp(397.5, 26, 399); walk(393.2); },
+    c6f5: () => { start(6); tp(434, 28, 432); hop(436.8); walk(437.4); jump(); },
     // ---- chapter 5
     c5f1: () => { start(5); tp(43.6, 16, 44.3); run(10); walk(48.5); land(); run(4, ['ArrowDown']); land(); walk(62); },
     c5j1: () => { start(5); tp(87, 22, 81); run(10); walk(91); land(); walk(103); },

@@ -467,3 +467,81 @@ function drawOpening(ctx, op) {
   const edge = Math.min(t, S.dur - t);
   if (edge < 40) { ctx.fillStyle = `rgba(0,0,0,${1 - edge / 40})`; ctx.fillRect(0, 0, W, Hh); }
 }
+
+// ---------------------------------------------------------------------------
+// Chapter 6: the chapel (Grey's pole burns again), the queen, the great shadow,
+// the three lights, and the evening after.
+// ---------------------------------------------------------------------------
+function chapelScript() {
+  return [
+    hold(),
+    Cut.talk('ルミナ', '……ここ、あったかい におい。'),
+    Cut.talk('グレイ', '灯の巫女の 礼拝堂だ。 ……女王陛下が、まだ 光を 持っていた頃の。'),
+    Cut.talk('グレイ', 'この燭台の火は、十三年 消えずに 残っていたのか。 ……誰かが、毎晩 守っていたんだな。'),
+    Cut.run((g) => { g.hero.facing = 1; g.hero.pose = 'atk40'; Sfx.play('save'); g.shake = 2; }),
+    Cut.wait(30),
+    Cut.run((g) => { g.fire = true; g.hero.pose = null; g.particles.burst(g.hero.x + 10, g.hero.y - 28, 16, { col: '#ffb040', life: 30, max: 1.5 }); }),
+    Cut.wait(30),
+    Cut.talk('グレイ', '……灯竿に、火が もどった。'),
+    Cut.talk('ルミナ', 'グレイさんの 火……！ わたしの 光と、ふたつ。'),
+    Cut.talk('グレイ', 'ああ。 影を 消すのは 闇じゃない。 ……もうひとつの 光だ。 行こう、ルミナ。'),
+  ];
+}
+function queenScript() {
+  return [
+    hold(),
+    Cut.wait(30),
+    Cut.talk('ルミナ', '……だれか いる。'),
+    Cut.talk('ノクティア', '……来てしまったのね。'),
+    Cut.talk('ルミナ', 'そのランタン……。 肖像画の ひと。 ……おかあさま？'),
+    Cut.talk('ノクティア', '光がなければ、影も 生まれない。 ……そう信じて、わたしは あなたを 手放した。'),
+    Cut.talk('ノクティア', 'その光が、また 国を 呑みこむ前に。 ……灯守り。 その子の光を、消して。'),
+    Cut.talk('グレイ', '……お断りします、陛下。 十三年前は、あなたの命に 従った。 今度は 従わない。'),
+    Cut.run((g) => { for (const L of g.lamps) if (L.fixed) { L.fixed = false; L.lit = false; } Sfx.play('plateoff'); g.fade = 0.6; }),
+    Cut.talk('ノクティア', '……なら、せめて この城から 灯りを。'),
+    Cut.run((g) => { g.shake = 6; g.heroine.emote('!', 80); Sfx.play('emerge'); }),
+    Cut.say('heroine', 'くらい……こわい……！', 'cry', 80),
+    // her fear overflows as light: the candles blaze up, and from that light a shadow stands up on the wall
+    Cut.run((g) => { g.fade = 0; for (const L of g.lamps) if (L.x > g.finalSpot.x0 && L.x < g.finalSpot.x1) { L.fixed = true; L.lit = true; } g.shake = 10; Sfx.play('clear'); }),
+    Cut.wait(60),
+    Cut.talk('グレイ', '……大影！ ルミナ、あれは――'),
+    Cut.talk('ルミナ', 'わたしの……影……？'),
+    Cut.talk('グレイ', '（壁の影は、燭台の近くでは大きく、遠くでは薄い。 ……その間で、胸の光を 狙う）'),
+  ];
+}
+function finaleScript() {
+  return [
+    hold(),
+    Cut.wait(30),
+    Cut.say('heroine', '……いかないで。 ひとりに しないで。', 'cry', 110),
+    Cut.talk('ルミナ', '……この声、わたしの 声。 聖堂で、ずっと ひとりで 言ってた。'),
+    Cut.talk('グレイ', 'ルミナ……！'),
+    Cut.run((g) => { if (g.queen) { g.queen.x = g.heroine.x + 3 * TILE; } }),
+    Cut.talk('ノクティア', '……わたしが 捨てたのは、光じゃない。 この子の、手だった。'),
+    Cut.run((g) => { if (g.queen) g.queen.lit = true; Sfx.play('save'); g.shake = 4; }),
+    Cut.wait(40),
+    Cut.image('assets/story/finale.webp'),
+    Cut.run((g) => { if (g.finalBoss) g.finalBoss.alpha = 0.25; g.kageboshi = [new Kageboshi(g.heroine.x + 10, g.heroine.y, 0)]; Sfx.play('clear'); }),
+    Cut.wait(60),
+    Cut.talk('ルミナ', '……ずっと、いっしょに いてくれたんだね。'),
+    Cut.talk('ルミナ', 'こわがって、ごめんね。 ……もう、おいていかないよ。'),
+    Cut.run((g) => { if (g.finalBoss) g.finalBoss.alpha = 0; g.heroine.emote('♥', 90); }),
+    Cut.talk('ノクティア', 'ルミナ。 ……ごめんなさい。 もう一度、あなたの 光を 見せて。'),
+    Cut.talk('ルミナ', '……おかあさま。'),
+    Cut.talk('グレイ', '三つの光、か。 ……影は、消えなかった。 小さく、やわらかく なっただけだ。'),
+    Cut.fade(1, 80),
+  ];
+}
+function endingScript(lit, shards) {
+  return [
+    hold(),
+    Cut.talk('マルタ', 'グレイ……！ ルミナ……！'),
+    Cut.talk('ルミナ', 'マルタ！ みて、まちに あかりが ともってる。'),
+    ...(lit >= 5 ? [Cut.talk('マルタ', 'ぜんぶ、グレイが ともしたの？ ……灯守りが、帰ってきたのね。')] : []),
+    Cut.talk('グレイ', 'ああ。 今夜から、この街の灯りは また わたしの 仕事だ。'),
+    Cut.talk('ノクティア', '消灯令は、今日で おしまい。 ……灯の国に、夜の灯りを かえします。'),
+    Cut.talk('ルミナ', 'あのね、みんなも いっしょ。 ……影ぼうしって、なまえを つけたの。'),
+    Cut.fade(1, 60),
+    Cut.image('assets/story/epilogue.png'),
+  ];
+}

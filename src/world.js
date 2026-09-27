@@ -24,6 +24,10 @@ const THEMES = {
     back2: (r) => 'vplay' + Math.floor(r * 4),
     deep: '#100e1a', shade: 'rgba(10,8,20,0.66)', edges: ['#100e1a', '#8a8eaa', '#2e2e44', '#2a2a40'],
     sky: { grad: 'sky5', far: 'far5', mid: 'mid5', farFill: '#30264a', midFill: '#1a1628' } },
+  castle: { front: (r) => 'kst' + Math.floor(r * 4), top: 'ktop', back: (r) => (r < 0.04 ? 'kwall1' : 'kwall' + [0, 2, 3][Math.floor(r * 3)]),
+    back2: (r) => 'kpale' + Math.floor(r * 4),
+    deep: '#0e0e1c', shade: 'rgba(10,10,22,0.66)', edges: ['#0e0e1c', '#9aa0c8', '#2e3050', '#2a2c48'],
+    sky: { grad: 'sky6', far: 'far6', mid: 'mid6', farFill: '#12122a', midFill: '#101022' } },
 };
 
 class World {
@@ -250,6 +254,9 @@ class World {
         }
         case 'twindow': drawTile(ctx, 'twindow', x, y); break;
         case 'shut': drawTile(ctx, 'shut', x - 16, y - 40); break;
+        case 'portrait': drawTile(ctx, 'portrait', x, y - 32); break;
+        case 'kwindow': drawTile(ctx, 'kwindow', x, y - 32); break;
+        case 'throne': drawTile(ctx, 'throne', x - 24, y - 48); break;
         case 'slaundry': drawTile(ctx, 'slaundry', x, y); break;
         case 'cat': if (Math.floor(t / 400 + d.x) % 5) drawTile(ctx, 'cat', x + 2, y - 8); break;     // now and then it wanders off
         case 'smoke':                             // someone keeps a stove going behind the shutters

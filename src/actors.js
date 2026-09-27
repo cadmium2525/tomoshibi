@@ -194,9 +194,20 @@ class Hero extends Body {
     return 'jump' + idle[Math.floor(this.t / 14) % 8];
   }
 
+  // where the flame on the pole is (chapter 6, once it burns again)
+  flameAt() {
+    if (this.state === 'attack') { const t = this.caneTip(); return { x: t.x, y: t.y - 3 }; }
+    return { x: this.x + this.facing * 9, y: this.y - 25 };
+  }
   draw(ctx, cx, cy) {
     if (this.state === 'fallout') return;
     if (this.flash > 0 && this.state !== 'hurt' && (this.flash >> 2) % 2) return;
+    if (game.fire && this.state !== 'attack' && !(this.downed && this.state === 'hurt')) {
+      const f = this.flameAt(), px = Math.round(f.x - cx), py = Math.round(f.y - cy), w = (this.t >> 2) % 2;
+      ctx.fillStyle = '#e0602a'; ctx.fillRect(px - 1, py - 2, 3, 3);
+      ctx.fillStyle = '#ffb040'; ctx.fillRect(px - 1 + w, py - 4, 2, 3);
+      ctx.fillStyle = '#fff4c0'; ctx.fillRect(px, py - 2, 1, 1);
+    }
     const x = this.x - cx, y = this.y - cy;
     const white = this.state === 'hurt' && this.t < 6;
     if (this.downed && this.state === 'hurt' && this.onGround) {
@@ -476,7 +487,7 @@ class Heroine extends Body {
     }
     if (want) {
       const res = this.probe(w, want);
-      const speed = (adx > 72 || Math.abs(dy) > 60 ? 2.0 : 1.05) * (this.hooded ? 0.75 : 1);
+      const speed = (adx > 72 || Math.abs(dy) > 60 ? 2.0 : 1.05) * (this.hooded ? 0.75 : 1) * (this.slowed ? 0.4 : 1);
       this.facing = want;
       switch (res) {
         case 'clear': this.vx = approach(this.vx, want * speed, 0.12); this.stuckT = 0; break;
@@ -889,6 +900,7 @@ class Guard extends Body {
       const px = e.x + (h.x - e.x) * i / n, py = e.y + (h.y - 18 - e.y) * i / n;
       if (w.tileAt(px, py)) return false;
       for (const g of game.gates) { const b = g.solidBox(); if (b && px > b.x0 && px < b.x1 && py > b.y0 && py < b.y1) return false; }
+      for (const v of game.veils) { const b = v.solidBox(); if (b && px > b.x0 && px < b.x1 && py > b.y0 && py < b.y1) return false; }   // (nor through a veil of shadow)
     }
     return true;
   }
@@ -1577,5 +1589,198 @@ class Ookage {
     }
     ctx.restore();
     if (this.state === 'sleep' && this.t % 90 < 45) { ctx.fillStyle = '#6a58a0'; ctx.font = '8px sans-serif'; ctx.fillText('…', x + 24, y - 70); }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 大影: Lumina's own shadow, thirteen years of being alone. Not to be beaten -
+// to be made small and soft again.
+//  1 (the wall): it is her shadow on the throne room's pale wall, big when she
+//    stands near a flame. Too near and its heart is out of the pole's reach; too
+//    far and the shadow is too faint to strike. Now and then it reaches an arm
+//    along the floor for her. Four blows on its heart.
+//  2 (the dark): it steps off the wall and comes for her; pools of dark spread
+//    under her feet. Lit by two lights at once, close by (her light, the pole's
+//    flame) it thins and its heart shows. Four blows.
+class FinalShadow {
+  constructor(B) {
+    this.B = B; this.form = 1; this.hp = 4; this.t = 0; this.state = 'wall'; this.st = 0;
+    this.x = B.x; this.S = 2; this.flash = 0; this.arm = null; this.darkT = 0;
+    this.pools = []; this.thin = 0; this.touchCd = 0; this.alive = true; this.alpha = 1; this.armCd = 200;
+  }
+  setState(s) { this.state = s; this.st = 0; }
+  flames(game) { return game.lamps.filter((L) => L.lit && L instanceof Candle && Math.abs(L.y - this.B.y) < 30); }
+  coreY() { return this.B.y - 24 * this.S; }
+  // on the wall the heart can be struck only while the shadow is neither too big nor too faint
+  coreOpen() {
+    if (this.guard > 0) return false;                // (it gathers itself after each blow)
+    if (this.form === 1) return this.state === 'wall' && this.S >= 1.6 && this.S <= 2.6;
+    return this.thin >= 0.8 && this.state === 'walk';
+  }
+  hurtBox() {
+    if (!this.coreOpen() || this.flash > 0) return null;
+    const y = this.form === 1 ? this.coreY() : this.B.y - 44;
+    return { x0: this.x - 12, x1: this.x + 12, y0: y - 12, y1: y + 12 };
+  }
+  update(game) {
+    this.t++; this.st++;
+    if (this.flash > 0) this.flash--;
+    if (this.touchCd > 0) this.touchCd--;
+    if (this.guard > 0) this.guard--;
+    const h = game.heroine, hero = game.hero, B = this.B;
+    if (this.form === 1) this.updateWall(game, h, hero, B);
+    else this.updateDark(game, h, hero, B);
+  }
+  updateWall(game, h, hero, B) {
+    // it is her shadow: it stands where the flame throws it, as big as the flame makes it
+    let flame = null, bd = 999;
+    for (const L of this.flames(game)) if (Math.abs(L.x - h.x) < bd) { bd = Math.abs(L.x - h.x); flame = L; }
+    const d = Math.max(8, bd);
+    this.S = approach(this.S, clamp(150 / d, 1.2, 5), 0.05);
+    const away = flame ? sign(h.x - flame.x) || 1 : 1;
+    if (this.state !== 'pull') {
+      const tx = clamp(h.x + away * (10 + 9 * this.S), B.x0 + 24, B.x1 - 24);
+      this.x += clamp(tx - this.x, -1.5, 1.5);
+    }
+    // far from any flame, in the dark, she is frightened: shadow children come up
+    this.darkT = d > 7 * TILE && h.state === 'normal' ? this.darkT + 1 : 0;
+    if (this.darkT > 240 && !game.shadows.some((s) => s.alive && s.state !== 'die')) { this.darkT = 0; game.spawnNear(h); }
+    // an arm along the floor, reaching for her
+    if (this.state === 'wall') {
+      if (--this.armCd <= 0 && h.state === 'normal') { this.setState('reach'); this.arm = { len: 0, max: 26 * this.S + 20, dir: sign(h.x - this.x) || 1 }; Sfx.play('emerge'); }
+    } else if (this.state === 'reach') {
+      const A = this.arm;
+      A.len = Math.min(A.max, A.len + 2.2);
+      const tip = this.x + A.dir * A.len;
+      if (h.grabbable() && !h.carriedBy && Math.abs(tip - h.x) < 10 && Math.abs(h.y - B.y) < 8) {
+        h.carriedBy = this; h.setState('carried'); h.mode = 'follow';
+        this.setState('pull'); Sfx.play('grab'); game.stats.grabs++;
+        game.say(h, 'いや……！ ひっぱらないで！', 'cry', 80);
+      } else if (A.len >= A.max && this.st > 70) { this.arm = null; this.armCd = 220; this.setState('wall'); }
+    } else if (this.state === 'pull') {               // drawing her into the wall
+      const A = this.arm;
+      A.len = Math.max(0, A.len - 0.45);
+      if (A.len <= 4 || this.st > 170) { game.gameOver(); return; }
+    }
+  }
+  updateDark(game, h, hero, B) {
+    if (this.state === 'peel') { if (this.st > 90) this.setState('walk'); return; }
+    // it walks for her
+    if (this.state === 'walk') {
+      const dx = h.x - this.x;
+      this.x += clamp(dx, -0.32, 0.32);
+      this.x = clamp(this.x, B.x0 + 16, B.x1 - 16);
+      if (this.grabCd > 0) this.grabCd--;
+      if (Math.abs(dx) < 10 && h.grabbable() && !h.carriedBy && this.thin < 0.5 && !(this.grabCd > 0)) {
+        h.carriedBy = this; h.setState('carried'); h.mode = 'follow';
+        this.setState('engulf'); Sfx.play('grab'); game.stats.grabs++;
+        game.say(h, 'くらい……！ グレイさん……！', 'cry', 90);
+      }
+    } else if (this.state === 'engulf') {
+      if (this.st > 160) { game.gameOver(); return; }
+    }
+    // two lights on it at once, close by (her light and the pole's flame): it thins
+    const Ls = [];
+    if (!h.hooded && h.state !== 'carried') Ls.push(h.x);
+    if (game.fire && hero.state !== 'hurt') Ls.push(hero.x);
+    const both = Ls.filter((x) => Math.abs(x - this.x) < 76).length >= 2;
+    this.thin = both ? Math.min(1, this.thin + 1 / 45) : Math.max(0, this.thin - 1 / 30);
+    // pools of dark under her feet
+    if (this.t % 200 === 0 && h.state === 'normal') this.pools.push({ x: h.x, r: 4, t: 0 });
+    if (this.t % 420 === 0 && !game.shadows.some((s) => s.alive && s.state !== 'die')) game.spawnNear(h);   // and shadow children about her
+    for (const p of this.pools) { p.t++; p.r = Math.min(22, p.r + 0.12); }
+    h.slowed = this.pools.some((p) => Math.abs(h.x - p.x) < p.r && Math.abs(h.y - B.y) < 6);
+    h.sunk = h.slowed ? (h.sunk || 0) + 1 : 0;
+    if (h.sunk > 260 && h.grabbable() && !h.carriedBy && !(this.grabCd > 0)) {
+      h.sunk = 0; h.carriedBy = this; h.setState('carried'); this.setState('engulf'); Sfx.play('grab');
+      game.say(h, 'しずむ……！', 'cry', 80);
+    }
+  }
+  // where she hangs: at the tip of the arm (on the wall) / in the middle of it (off it)
+  carryOff() { return this.form === 1 && this.arm ? [this.arm.len, 0] : [0, -6]; }
+  get facing() { return this.arm ? this.arm.dir : 1; }
+  get y() { return this.B.y; }                   // (she hangs from it at floor level)
+  // the pole: it makes it let go of her; on the open heart it wounds
+  hit(game, dir) {
+    const h = game.heroine;
+    if (this.state === 'pull' || this.state === 'engulf') {
+      h.carriedBy = null; h.setState('down'); h.vy = -2; h.vx = dir * 0.8; h.flash = 20;
+      game.say(h, 'きゃっ…！', 'her', 40); Sfx.play('drop');
+      this.arm = null; this.armCd = 240; this.flash = 12; this.grabCd = 150;
+      if (this.form === 2) { this.x = clamp(this.x + (sign(this.x - game.hero.x) || 1) * 36, this.B.x0 + 16, this.B.x1 - 16); h.sunk = 0; }   // it reels back
+      this.setState(this.form === 1 ? 'wall' : 'walk');
+      return true;
+    }
+    if (!this.coreOpen()) return false;
+    this.hp--; this.flash = 20; game.shake = 5; Sfx.play('kill');
+    this.guard = 130; if (this.form === 1) this.armCd = 30;       // it hides its heart a while, and reaches for her at once
+    game.particles.burst(this.x, this.form === 1 ? this.coreY() : this.B.y - 44, 18, { col: '#ffe9a8', life: 26, max: 2 });
+    if (this.form === 2) { this.thin = 0; this.x = clamp(this.x + dir * 40, this.B.x0 + 16, this.B.x1 - 16); }
+    if (this.hp <= 0) {
+      if (this.form === 1) {
+        this.form = 2; this.hp = 4; this.setState('peel'); this.arm = null; game.shake = 8; Sfx.play('emerge');
+        game.say(h, '……かべから、でてくる……！', 'cry', 110);
+      } else this.alive = false;
+    }
+    return true;
+  }
+  clearPools(box) {
+    const n = this.pools.length;
+    this.pools = this.pools.filter((p) => !(box.x1 > p.x - p.r && box.x0 < p.x + p.r));
+    return this.pools.length < n;
+  }
+  armBox() {
+    if (this.state !== 'reach' || !this.arm) return null;
+    const tip = this.x + this.arm.dir * this.arm.len, a = Math.min(this.x, tip), b = Math.max(this.x, tip);
+    return { x0: a, x1: b, y0: this.B.y - 12, y1: this.B.y };
+  }
+  cutArm(game) {
+    this.arm = null; this.armCd = 220; this.setState('wall'); Sfx.play('hit');
+    game.particles.burst(game.hero.x + game.hero.facing * 20, this.B.y - 6, 10, { col: '#8060c0', life: 18, max: 1.5 });
+  }
+  draw(ctx, cx, cy) {
+    const B = this.B;
+    const [sx, sy, w, hh, ax, ay] = Sheets.heroine.f.idle0;
+    for (const p of this.pools) {                     // pools of dark on the floor
+      ctx.fillStyle = 'rgba(8,4,18,0.85)';
+      ctx.beginPath(); ctx.ellipse(Math.round(p.x - cx), Math.round(B.y - cy), p.r, 3 + p.r * 0.12, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    const x = Math.round(this.x - cx), y = Math.round(B.y - cy);
+    const img = this.flash > 0 && (this.flash >> 1) % 2 && Sheets.heroine.white ? Sheets.heroine.white : Sheets.heroine.dark;
+    ctx.save();
+    if (this.form === 1) {
+      // on the wall: her own silhouette, huge, faint when far from the flames
+      const s = this.S * 1.4, faint = this.S < 1.6 ? 0.35 : 0.8;
+      ctx.globalAlpha = (this.state === 'pull' ? 0.9 : faint) * this.alpha;
+      ctx.translate(x, y); ctx.scale(-s, s);
+      ctx.drawImage(img, sx, sy, w, hh, -ax, -ay, w, hh);
+      ctx.restore(); ctx.save();
+      ctx.fillStyle = `rgba(255,233,168,${faint})`;
+      const ey = Math.round(y - 27 * s);
+      ctx.fillRect(x - Math.round(3 * s), ey, 2, 2); ctx.fillRect(x + Math.round(1 * s), ey, 2, 2);
+      if (this.coreOpen()) {
+        const c = Math.round(this.coreY() - cy), p = (this.t >> 3) % 2;
+        ctx.fillStyle = '#b090ff'; ctx.fillRect(x - 3 - p, c - 3 - p, 6 + 2 * p, 6 + 2 * p); ctx.fillStyle = '#fff'; ctx.fillRect(x - 1, c - 1, 2, 2);
+      }
+      if (this.arm) {                                 // the arm along the floor
+        const A = this.arm, tip = x + A.dir * A.len;
+        ctx.fillStyle = 'rgba(10,6,20,0.85)';
+        ctx.fillRect(Math.min(x, tip), y - 5, Math.abs(tip - x), 5);
+        ctx.fillRect(tip - 4, y - 10, 8, 10);
+      }
+    } else {
+      // off the wall: a child's shape three times her size, standing in the room
+      const s = 3.2, a = 1 - 0.7 * this.thin;
+      ctx.globalAlpha = a * this.alpha;
+      ctx.translate(x, y + (this.state === 'peel' ? (1 - this.st / 90) * 30 : 0)); ctx.scale(s, s);
+      ctx.drawImage(img, sx, sy, w, hh, -ax, -ay, w, hh);
+      ctx.restore(); ctx.save();
+      ctx.fillStyle = '#ffe9a8'; ctx.fillRect(x - 8, y - 84, 2, 2); ctx.fillRect(x + 4, y - 84, 2, 2);
+      if (this.coreOpen()) {
+        const p = (this.t >> 3) % 2;
+        ctx.fillStyle = '#b090ff'; ctx.fillRect(x - 4 - p, y - 48 - p, 8 + 2 * p, 8 + 2 * p); ctx.fillStyle = '#fff'; ctx.fillRect(x - 1, y - 45, 2, 2);
+      }
+    }
+    ctx.restore();
   }
 }

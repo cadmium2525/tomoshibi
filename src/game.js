@@ -87,7 +87,9 @@ class Game {
     this.poles = []; this.sanctuaries = [];
     this.pedestals = []; this.mirrors = []; this.receptors = []; this.lifts = []; this.wheels = []; this.beams = [];
     this.logbook = null; this.bossSpot = null; this.boss = null; this.bossDone = false; this.greatLamp = null; this.moth = null;
-    this.whaleSpot = null; this.whale = null; this.curtain = null; this.ookage = null; this.playwall = null; this.ring = 0;
+    this.whaleSpot = null; this.whale = null; this.curtain = null;
+    this.veils = []; this.fire = false; this.lshadow = null; this.finalSpot = null; this.finalBoss = null; this.epilogue = null; this.kageboshi = [];
+    this.chapel = null; this.queenMet = false; this.epiSpot = null; this.epiEnd = null; this.ended = false; this.heroine && (this.heroine.slowed = false); this.ookage = null; this.playwall = null; this.ring = 0;
     this.flicker = false; this.flickT = 0;
     this.guards = []; this.lamps = []; this.fear = 0; this.fearCd = 0; this.nooks = []; this.martaSpot = null; this.npcSpots = [];
     this.darks = (stage.darks || []).map(([x0, y0, x1, y1]) => ({ x0: x0 * TILE, y0: y0 * TILE, x1: (x1 + 1) * TILE, y1: (y1 + 1) * TILE }));
@@ -113,6 +115,13 @@ class Game {
         case 'marker': this.markers.push(new Marker(e)); break;
         case 'guard': this.guards.push(new Guard(e)); break;
         case 'lamp': this.lamps.push(new Lamp(e)); break;
+        case 'candle': this.lamps.push(new Candle(e)); break;
+        case 'slatch': this.levers.push(new ShadowLatch(e)); break;
+        case 'veil': this.veils.push(new Veil(e)); break;
+        case 'finalboss': this.finalSpot = { x: e.x, y: e.y, x0: e.x0 * TILE, x1: (e.x1 + 1) * TILE }; break;
+        case 'epilogue': this.epiSpot = { x: e.x, y: e.y }; break;
+        case 'chapel': this.chapel = { x: e.x, y: e.y }; break;
+        case 'epiend': this.epiEnd = { x: e.x, y: e.y }; break;
         case 'pole': this.poles.push(new Pole(e)); break;
         case 'villager': { const p = new Portal(e.x, e.y); this.portals.push(p); this.shadows.push(new Villager(p, e)); break; }
         case 'whale': {
@@ -149,15 +158,19 @@ class Game {
     if (this.mist) this.world.dyn.push(this.mist);
     this.world.dyn.push(...this.poles, ...this.lifts);
     if (this.curtain) this.world.dyn.push(this.curtain);        // (chapter 5: no way past the whale until it is at peace)
+    this.world.dyn.push(...this.veils);
     for (const w of this.wheels) this.world.dyn.push(...w.plats);
     if (cp) {
       for (const l of this.levers) if (cp.levers.includes(l.id)) { l.on = true; }
       for (const g of this.gates) if (this.levers.some((l) => l.on && l.gateIds.includes(g.id))) { g.locked = true; g.open = 1; }
+      for (const b of this.bridges) if (this.levers.some((l) => l.on && l.gateIds.includes(b.id))) { b.locked = true; b.k = 1; b.on = true; }
       for (const s of this.shrines) if (cp.shrines.includes(s.id)) s.lit = true;
       for (const a of this.ambushes) if (cp.ambush.includes(a.id)) { a.done = true; a.wave = a.waves.length; }
       if (cp.dawn) { this.dawnDone = true; this.sun = 1; if (this.mist) this.mist.k = 0; }
       if (cp.revealed && this.logbook) { this.logbook.done = true; this.flicker = !cp.bossDone; }
       if (cp.revealed && this.playwall) this.playwall.done = true;
+      if (cp.fire) this.fire = true;
+      if (cp.revealed && this.finalSpot) this.queenMet = true;
       if (cp.bossDone && this.ookage) this.ookage.alpha = 0;
       if (cp.bossDone) this.bossDone = true;
       for (const b of this.blocks) { const p = cp.blocks[b.id]; if (p) { b.x = p.x; b.y = p.y; } }
@@ -183,8 +196,8 @@ class Game {
 
   saveCheckpoint(shrine) {
     this.checkpoint = {
-      x: shrine.x, y: shrine.y, escape: !!shrine.escape, dawn: this.dawnDone,
-      revealed: !!((this.logbook && this.logbook.done) || (this.playwall && this.playwall.done)), bossDone: this.bossDone,
+      x: shrine.x, y: shrine.y, escape: !!shrine.escape, dawn: this.dawnDone, fire: this.fire,
+      revealed: !!((this.logbook && this.logbook.done) || (this.playwall && this.playwall.done) || this.queenMet), bossDone: this.bossDone,
       levers: this.levers.filter((l) => l.on).map((l) => l.id),
       shrines: this.shrines.filter((s) => s.lit).map((s) => s.id),
       ambush: this.ambushes.filter((a) => a.done).map((a) => a.id),
@@ -198,8 +211,8 @@ class Game {
   progressSnapshot() {
     const cp = this.checkpoint || {};
     return {
-      x: cp.x, y: cp.y, escape: cp.escape, dawn: this.dawnDone,
-      revealed: !!((this.logbook && this.logbook.done) || (this.playwall && this.playwall.done)), bossDone: this.bossDone,
+      x: cp.x, y: cp.y, escape: cp.escape, dawn: this.dawnDone, fire: this.fire,
+      revealed: !!((this.logbook && this.logbook.done) || (this.playwall && this.playwall.done) || this.queenMet), bossDone: this.bossDone,
       levers: this.levers.filter((l) => l.on).map((l) => l.id),
       shrines: this.shrines.filter((s) => s.lit).map((s) => s.id),
       ambush: this.ambushes.filter((a) => a.done).map((a) => a.id),
@@ -350,6 +363,9 @@ class Game {
     for (const w of this.wheels) w.update(this);
     for (const m of this.markers) m.update(this);
     this.updateSoft();
+    for (const l of this.levers) if (l.update) l.update(this);
+    for (const v of this.veils) v.update(this);
+    this.updateWallShadow();
     for (const gd of this.guards) { gd.update(this); if (this.state !== 'play') return; }
     this.updateFear();
     if (this.mist) this.mist.update(this);
@@ -358,6 +374,9 @@ class Game {
     this.updateFlicker();
     if (this.updateBoss()) return;
     if (this.updatePlaywall()) return;
+    if (this.updateChapel()) return;
+    if (this.updateFinal()) return;
+    if (this.updateEpilogue()) return;
     if (this.updateWhale()) return;
     if (this.ookage) this.ookage.update();
     if (this.updateMarta()) return;
@@ -698,7 +717,7 @@ class Game {
   countFound(table) { return Object.keys(table).filter((k) => this.collected.has(k)).length; }
   foundHtml() {
     return `<b>影絵の欠片</b>${this.countFound(SHARDS)} / ${Object.keys(SHARDS).length}<br>
-      <b>灯守りの手記</b>${this.countFound(PAGES)} / ${Object.keys(PAGES).length}`;
+      <b>${CHAPTERS[this.chapter].pageLabel || '灯守りの手記'}</b>${this.countFound(PAGES)} / ${Object.keys(PAGES).length}`;
   }
 
   // ↑ next to Lumina: put Grey's coat over her (or take it off) - chapters with CHAPTERS[n].hood
@@ -824,6 +843,14 @@ class Game {
     for (const gd of this.guards) {
       if (hero.hitList.has(gd) || !overlap(box, gd.box())) continue;
       if (gd.bump(this, hero.facing)) { hero.hitList.add(gd); this.shake = 1.5; }
+    }
+    const F = this.finalBoss;
+    if (F && !hero.hitList.has(F)) {
+      const hb = F.hurtBox(), ab = F.armBox(), h = this.heroine;
+      const holding = (F.state === 'pull' || F.state === 'engulf') && overlap(box, { x0: h.x - 10, x1: h.x + 10, y0: h.y - 30, y1: h.y });
+      if ((hb && overlap(box, hb)) || holding) { if (F.hit(this, hero.facing)) { hero.hitList.add(F); this.hitstop = 6; this.shake = 3; } }
+      else if (ab && overlap(box, ab)) { F.cutArm(this); hero.hitList.add(F); }
+      else if (F.clearPools(box)) { hero.hitList.add(F); Sfx.play('hit'); }
     }
     const Wh = this.whale, wb = Wh && Wh.hurtBox();
     if (wb && !hero.hitList.has(Wh) && overlap(box, wb) && Wh.hit(this, hero.facing)) { hero.hitList.add(Wh); this.hitstop = 5; this.shake = 3; }
@@ -955,6 +982,7 @@ class Game {
 
   // leaving her alone summons the shadows
   updateDanger() {
+    if (this.epilogue) { this.dangerT = 0; return; }
     const hero = this.hero, h = this.heroine;
     if (this.escape) { this.dangerT = 0; return; }
     const d = Math.hypot(h.x - hero.x, (h.y - hero.y) * 1.2);
@@ -1118,6 +1146,103 @@ class Game {
       return true;
     }
     return false;
+  }
+
+  // ---- chapter 6: the chapel (the flame), the queen, the great shadow, the epilogue ----
+  updateChapel() {
+    const C = this.chapel, hero = this.hero;
+    if (!C || this.fire || !hero.onGround || Math.abs(hero.x - C.x) > 20 || Math.abs(hero.y - C.y) > 12) return false;
+    this.startScene(chapelScript(), () => { this.fire = true; });
+    return true;
+  }
+  updateFinal() {
+    const B = this.finalSpot, hero = this.hero;
+    if (!B || this.epilogue) return false;
+    if (!this.finalBoss) {
+      if (this.bossDone || !hero.onGround || hero.x < B.x0 + 3 * TILE || Math.abs(hero.y - B.y) > 20) return false;
+      if (!this.queen) this.addNpc('queen', 'queen', B.x1 - 2.5 * TILE, B.y, { lit: false });
+      const begin = () => { this.queenMet = true; this.finalBoss = new FinalShadow(B); this.heroine.mode = 'follow'; };
+      if (this.queenMet) { begin(); this.say(this.heroine, '……もういちど。', 'her', 80); return false; }
+      this.startScene(queenScript(), begin);
+      return true;
+    }
+    this.finalBoss.update(this);
+    if (this.state !== 'play') return true;
+    if (!this.finalBoss.alive) {
+      for (const s of this.shadows) if (s.alive && s.state !== 'die') s.setState('die');
+      this.heroine.slowed = false;
+      this.startScene(finaleScript(), () => this.startEpilogue());
+      return true;
+    }
+    return false;
+  }
+  startEpilogue() {
+    const E = this.epiSpot, hero = this.hero, h = this.heroine;
+    this.finalBoss = null; this.bossDone = true; this.epilogue = true;
+    for (const n of [...this.npcs]) this.removeNpc(n.key);
+    this.shadows = []; this.portals = [];
+    hero.x = E.x + 14; hero.y = E.y; h.x = E.x; h.y = E.y; hero.facing = h.facing = 1; h.hooded = false; h.mode = 'follow';
+    hero.vx = hero.vy = h.vx = h.vy = 0; hero.lastSafe = { x: hero.x, y: hero.y };
+    this.kageboshi = [0, 1, 2, 3].map((k) => new Kageboshi(E.x - 20 - k * 10, E.y, k));
+    this.addNpc('marta', 'marta', this.epiEnd.x - 5 * TILE, this.epiEnd.y, { lit: true });
+    this.addNpc('queen', 'queen', this.epiEnd.x + 1.5 * TILE, this.epiEnd.y, { lit: true });
+    this.black = 1; this.updateCamera(true);
+    this.notify('epi_hint', 260);
+  }
+  updateEpilogue() {
+    if (!this.epilogue) return false;
+    for (const k of this.kageboshi) k.update(this);
+    const E = this.epiEnd, hero = this.hero;
+    if (hero.onGround && hero.x > E.x - 2.5 * TILE && Math.abs(hero.y - E.y) < 16 && !this.ended) {
+      this.ended = true;
+      const lit = this.lamps.filter((L) => L.lit && L.x > this.epiSpot.x).length;
+      this.startScene(endingScript(lit, this.shardsFound()), () => this.showFinal());
+      return true;
+    }
+    return false;
+  }
+  showFinal() {
+    const s = this.stats, sec = Math.floor(s.time / 60), all = this.shardsFound() >= 30;
+    this.state = 'clear'; this.st = 0;
+    const prev = Save.read(), cleared = [...new Set([...(prev ? prev.cleared : []), this.chapter])];
+    Save.write({ chapter: this.chapter, cp: null, fresh: false, cleared, stats: this.stats, collected: [...this.collected] });
+    this.ui.hud.style.display = 'none'; this.ui.msg.style.display = 'none';
+    this.showCenter(`<h1>おわり</h1><h2>灯のルミナ</h2>
+      <div class="quote">「影を 消すのは 闇じゃない。 もうひとつの 光だ」</div>
+      ${all ? '<div class="quote">影ぼうしたちから：「ずっと みてたよ。 ……いってらっしゃい、ルミナ。 ぼくたちも、いっしょ」</div>' : ''}
+      <div class="keys"><b>第6章のクリアタイム</b>${Math.floor(sec / 60)}分${String(sec % 60).padStart(2, '0')}秒<br>
+      <b>影絵の欠片（ぜんぶ）</b>${this.shardsFound()} / 30<br>${this.foundHtml()}</div>
+      <div class="blink">${Touch.enabled ? 'タップで' : 'Z：'}タイトルへ</div>`, true, true);
+  }
+
+  // ---- chapter 6: Lumina's own shadow on the wall -------------------------------------
+  // The nearest lit candelabra on her floor throws her shadow onto the wall behind,
+  // away from the flame: the nearer she stands to it, the bigger it is.
+  updateWallShadow() {
+    const h = this.heroine;
+    this.lshadow = null;
+    if (this.world.theme !== 'castle' || this.finalBoss || this.epilogue || h.state === 'carried' || this.state !== 'play' && this.state !== 'cutscene') return;
+    let best = null, bd = 150;
+    for (const L of this.lamps) {
+      if (!L.lit || !(L instanceof Candle) || Math.abs(L.y - h.y) > 20) continue;
+      const d = Math.abs(h.x - L.x);
+      if (d < bd) { bd = d; best = L; }
+    }
+    if (!best) return;
+    const d = Math.max(6, bd), s = clamp(40 / d, 0.6, 4);
+    const away = sign(h.x - best.x) || 1;
+    this.lshadow = { x: h.x + away * (4 + 7 * s), y: h.y, s, away, src: best };
+  }
+  drawLShadow(ctx, cx, cy) {
+    const S = this.lshadow, h = this.heroine;
+    const r = Sheets.heroine.f[h.frame()] || Sheets.heroine.f.idle0;
+    const [sx, sy, w, hh, ax, ay] = r;
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.translate(Math.round(S.x - cx), Math.round(S.y - cy));
+    ctx.scale(h.facing < 0 ? -S.s : S.s, S.s);
+    ctx.drawImage(Sheets.heroine.dark, sx, sy, w, hh, -ax, -ay, w, hh);
+    ctx.restore();
   }
 
   // ---- chapter 5: the wall of shadow plays, the whale, the great shadow wakes ----------
@@ -1527,9 +1652,11 @@ class Game {
     const cx = Math.round(this.cam.x) + sx, cy = Math.round(this.cam.y) + sy;
     const w = this.world, T = this.t;
     w.drawParallax(ctx, cx, cy, this.sun);
+    if (this.epilogue) { const g = ctx.createLinearGradient(0, 0, 0, VH); g.addColorStop(0, 'rgba(255,140,90,0.10)'); g.addColorStop(1, 'rgba(255,170,90,0.45)'); ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH); }
     w.drawBack(ctx, cx, cy);
     w.drawDecor(ctx, cx, cy, T);
     if (this.playwall) this.drawPlaywall(ctx, cx, cy);
+    if (this.lshadow) this.drawLShadow(ctx, cx, cy);
     this.drawWindowBeams(ctx, cx, cy);
     if (this.door) this.door.draw(ctx, cx, cy, T);
     for (const d of this.doorways) d.draw(ctx, cx, cy, T);
@@ -1558,6 +1685,7 @@ class Game {
     for (const p of this.plates) p.draw(ctx, cx, cy, T);
     for (const b of this.bridges) b.draw(ctx, cx, cy, T);
     for (const c of this.crumbles) c.draw(ctx, cx, cy);
+    for (const v of this.veils) v.draw(ctx, cx, cy);
     if (this.exitDoor) this.exitDoor.draw(ctx, cx, cy, T);
     w.drawFront(ctx, cx, cy);
     if (w.softList.length) { w.drawSoft(ctx, cx, cy, T); this.drawRing(ctx, cx, cy); }
@@ -1572,7 +1700,10 @@ class Game {
     for (const gd of this.guards) gd.drawCone(ctx, cx, cy);
     for (const gd of this.guards) gd.draw(ctx, cx, cy);
     for (const n of this.npcs) n.draw(ctx, cx, cy);
+    if (this.finalBoss) this.finalBoss.draw(ctx, cx, cy);
     if (h.state !== 'carried') h.draw(ctx, cx, cy);
+    if (this.finalBoss && h.carriedBy === this.finalBoss) drawSprite(ctx, 'heroine', h.frame(), h.x - cx, h.y - cy, h.facing < 0);
+    for (const k of this.kageboshi) k.draw(ctx, cx, cy);
     for (const s of this.shadows) {
       s.draw(ctx, cx, cy);
       if (h.carriedBy === s) {
@@ -1661,6 +1792,7 @@ class Game {
     }
     const h = this.heroine, hero = this.hero;
     L.push({ x: hero.x, y: hero.y - 20, r: 58, a: 0.55 });
+    if (this.fire) { const f = hero.flameAt(); L.push({ x: f.x, y: f.y, r: 64 + Math.sin(T * 0.3) * 2, a: 0.85, col: 'rgba(255,160,70,0.14)' }); }
     const fl = hero.caneFlare();
     if (fl > 0) { const tip = hero.caneTip(); L.push({ x: tip.x, y: tip.y - 2, r: 24 + 34 * fl, a: 0.85, col: `rgba(255,150,60,${0.22 * fl})` }); }
     const flk = this.flickering() ? (Math.random() < 0.5 ? 1.6 : 0.5) : 1;
@@ -1690,7 +1822,8 @@ class Game {
     const hr = this.hero, inDark = this.darks.some((d) => hr.x >= d.x0 && hr.x < d.x1 && hr.y > d.y0 && hr.y <= d.y1);
     lc.fillStyle = inDark ? 'rgba(2,2,6,0.95)'
       : this.world.theme === 'forest' ? `rgba(8,6,24,${0.46 * (1 - 0.85 * this.sun)})`
-      : this.world.theme === 'town' ? 'rgba(6,5,16,0.6)' : this.world.theme === 'tower' ? (this.bossDark ? 'rgba(6,3,10,0.8)' : 'rgba(10,6,14,0.55)') : 'rgba(5,3,14,0.64)';
+      : this.world.theme === 'town' ? 'rgba(6,5,16,0.6)' : this.world.theme === 'tower' ? (this.bossDark ? 'rgba(6,3,10,0.8)' : 'rgba(10,6,14,0.55)')
+      : this.world.theme === 'castle' ? (this.epilogue ? 'rgba(40,20,24,0.28)' : 'rgba(6,6,16,0.62)') : 'rgba(5,3,14,0.64)';
     lc.fillRect(0, 0, VW, VH);
     lc.globalCompositeOperation = 'destination-out';
     const L = this.lights();
