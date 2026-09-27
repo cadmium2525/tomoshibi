@@ -3,6 +3,7 @@ window.T = {
   visited: {},
   run(frames, keys = [], taps = []) {
     if (game.state === 'title') game.startNew();
+    if (game.state === 'opening') game.finishOpening();
     if (game.state === 'cutscene' && !game.cutSkip) game.finishPrologue();     // tests start right after the prologue
     for (let i = 0; i < frames; i++) {
       Input.keys.clear(); keys.forEach((k) => Input.keys.add(k));

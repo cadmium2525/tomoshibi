@@ -340,3 +340,130 @@ function valleyEscapeScript(retry) {
     Cut.say('hero', 'ルミナ、手を！ 上まで 駆け上がるぞ！', 'hero', 90),
   ];
 }
+
+// ---------------------------------------------------------------------------
+// Opening (before the prologue): how the country of lamps went dark. Four scenes
+// drawn by hand on the canvas, a few lines of narration each. Buttons show the
+// rest of the lines / go on; the skip key goes straight to the prologue.
+// ---------------------------------------------------------------------------
+const OPENING = [
+  { kind: 'town', dur: 560, lines: [
+    'むかし、灯（ともしび）の国の夜は、たくさんの 灯りに 満ちていた。',
+    '灯守りたちが 毎晩 街灯に 火を入れ、人々は 灯の巫女の 祈りのもとで 暮らしていた。'] },
+  { kind: 'night', dur: 680, lines: [
+    '十三年前。 王女が 生まれた夜、城から 光が あふれ――',
+    'その光が 落とした 巨大な影が、王都を 呑みこんだ。',
+    '王は、行方知れずと なった。'] },
+  { kind: 'curfew', dur: 600, lines: [
+    '影を 恐れた女王は、国じゅうの 灯りを 消すよう 命じた。',
+    '「光がなければ、影も 生まれない」'] },
+  { kind: 'chapel', dur: 560, lines: [
+    'それから、十三年。',
+    '地図にない 地下聖堂の 奥で、ひとつの 小さな光が、壁の影と 話していた。'] },
+];
+
+// the town on its hill below the castle, with (some of) its lamps
+const OP_LAMPS = Array.from({ length: 34 }, (_, i) => {
+  const r = (n) => { const v = Math.sin(i * 127.1 + n * 311.7) * 43758.5453; return v - Math.floor(v); };
+  return { x: 12 + r(1) * 360, y: 132 + r(2) * 58 + (r(1) > 0.62 ? -18 : 0), off: r(3) };
+});
+function drawOpening(ctx, op) {
+  const S = OPENING[op.i], t = op.t, k = Math.min(1, t / S.dur);
+  const W = VW, Hh = VH;
+  const sky = (top, bot) => { const g = ctx.createLinearGradient(0, 0, 0, Hh); g.addColorStop(0, top); g.addColorStop(1, bot); ctx.fillStyle = g; ctx.fillRect(0, 0, W, Hh); };
+  const stars = (a) => {
+    for (let i = 0; i < 46; i++) {
+      const r = (n) => { const v = Math.sin(i * 91.7 + n * 47.3) * 24634.6345; return v - Math.floor(v); };
+      ctx.fillStyle = `rgba(220,220,255,${a * (0.5 + 0.5 * Math.sin(t * 0.03 + i))})`; ctx.fillRect(Math.floor(r(1) * W), Math.floor(r(2) * 120), 1, 1);
+    }
+  };
+  const pan = -t * 0.05;
+  const castle = (col) => {                          // on its hill, left of centre
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.moveTo(0, 150); ctx.quadraticCurveTo(110, 96, 230, 140); ctx.lineTo(W, 150); ctx.lineTo(W, Hh); ctx.lineTo(0, Hh); ctx.fill();
+    const cx = 118 + pan;
+    ctx.fillRect(cx - 30, 78, 60, 40); ctx.fillRect(cx - 40, 64, 14, 54); ctx.fillRect(cx + 26, 60, 14, 58); ctx.fillRect(cx - 8, 40, 16, 40);
+    ctx.beginPath(); ctx.moveTo(cx - 42, 64); ctx.lineTo(cx - 33, 48); ctx.lineTo(cx - 24, 64); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx + 24, 60); ctx.lineTo(cx + 33, 42); ctx.lineTo(cx + 42, 60); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx - 10, 40); ctx.lineTo(cx, 22); ctx.lineTo(cx + 10, 40); ctx.fill();
+    return cx;
+  };
+  const roofs = (col) => {
+    ctx.fillStyle = col;
+    for (let i = 0; i < 16; i++) {
+      const x = (i * 26 + pan * 2) % (W + 40) - 20, h = 22 + ((i * 37) % 20);
+      ctx.fillRect(x, Hh - 30 - h, 22, h + 30);
+      ctx.beginPath(); ctx.moveTo(x - 2, Hh - 30 - h); ctx.lineTo(x + 11, Hh - 42 - h); ctx.lineTo(x + 24, Hh - 30 - h); ctx.fill();
+    }
+  };
+  const lamps = (lit) => {
+    for (const L of OP_LAMPS) {
+      if (!lit(L)) continue;
+      const tw = 0.75 + 0.25 * Math.sin(t * 0.08 + L.off * 20);
+      ctx.fillStyle = `rgba(255,200,110,${0.12 * tw})`; ctx.fillRect(L.x - 6, L.y - 6, 14, 14);
+      ctx.fillStyle = `rgba(255,200,110,${0.25 * tw})`; ctx.fillRect(L.x - 2, L.y - 2, 6, 6);
+      ctx.fillStyle = `rgba(255,236,170,${tw})`; ctx.fillRect(L.x, L.y, 2, 2);
+    }
+  };
+  switch (S.kind) {
+    case 'town':
+      sky('#1a1840', '#4a3060'); stars(0.8);
+      castle('#241c38'); lamps(() => true); roofs('#16122a'); lamps((L) => L.y > 175);
+      break;
+    case 'night': {
+      sky('#141230', '#302040'); stars(0.6);
+      const cx = castle('#1e1830'); lamps(() => true); roofs('#140f24');
+      // a burst of light from the castle, then the shadow it throws, over everything
+      const f = clamp((t - 90) / 60, 0, 1), s = clamp((t - 170) / 260, 0, 1);
+      if (f > 0) {
+        const r = 10 + f * 220, a = 0.95 * clamp(1 - s * 3, 0, 1);
+        if (a > 0) {
+          const g = ctx.createRadialGradient(cx, 70, 2, cx, 70, r);
+          g.addColorStop(0, `rgba(255,250,230,${a})`); g.addColorStop(1, 'rgba(255,240,200,0)');
+          ctx.fillStyle = g; ctx.fillRect(0, 0, W, Hh);
+        }
+      }
+      if (s > 0) {
+        // a mass of shadow welling up out of the castle and rolling out over the town
+        for (let i = 0; i < 26; i++) {
+          const a = i / 26 * Math.PI * 2, d = s * (60 + (i % 5) * 40), rr = 14 + s * (30 + (i * 7) % 26);
+          const x = cx + Math.cos(a) * d * 1.6 + Math.sin(t * 0.02 + i) * 4, y = 64 + Math.sin(a) * d * 0.7;
+          const c = `${10 + (i % 3) * 8},${6 + (i % 3) * 4},${22 + (i % 3) * 10}`;
+          const g = ctx.createRadialGradient(x, y, 0, x, y, rr * 1.4);                  // soft-edged, like smoke
+          g.addColorStop(0, `rgba(${c},${0.6 + 0.3 * s})`); g.addColorStop(0.6, `rgba(${c},${0.35 * s + 0.2})`); g.addColorStop(1, `rgba(${c},0)`);
+          ctx.fillStyle = g; ctx.fillRect(x - rr * 1.4, y - rr * 1.4, rr * 2.8, rr * 2.8);
+        }
+        ctx.fillStyle = `rgba(6,3,12,${0.6 * s})`; ctx.fillRect(0, 0, W, Hh);
+        // two yellow points, far up in it
+        if (s > 0.6) { ctx.fillStyle = `rgba(255,233,168,${(s - 0.6) * 2})`; ctx.fillRect(cx + 20, 46, 2, 2); ctx.fillRect(cx + 34, 46, 2, 2); }
+      }
+      break;
+    }
+    case 'curfew':
+      sky('#0e0c20', '#1e1830'); stars(0.4);
+      castle('#18142a');
+      // the lamps go out one after another
+      lamps((L) => L.off > k * 1.15);
+      roofs('#100c1e');
+      if ((t >> 5) % 2 === 0 && k < 0.9) { ctx.fillStyle = 'rgba(160,150,190,0.3)'; ctx.fillRect(0, 0, W, 1); }
+      break;
+    case 'chapel': {
+      ctx.fillStyle = '#05040a'; ctx.fillRect(0, 0, W, Hh);
+      const x = W / 2, y = Hh - 60;
+      const g = ctx.createRadialGradient(x, y - 14, 2, x, y - 14, 70);
+      g.addColorStop(0, 'rgba(255,236,190,0.5)'); g.addColorStop(1, 'rgba(255,236,190,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, Hh);
+      ctx.fillStyle = '#1a1624'; ctx.fillRect(0, y, W, 60);
+      // her shadow on the wall behind her, bigger than she is
+      const [sx, sy, w, hh, ax, ay] = Sheets.heroine.f.idle0;
+      ctx.save(); ctx.globalAlpha = 0.6 + Math.sin(t * 0.05) * 0.05; ctx.translate(x + 30, y); ctx.scale(-2.2, 2.2);
+      ctx.drawImage(Sheets.heroine.dark, sx, sy, w, hh, -ax, -ay, w, hh);
+      ctx.restore();
+      drawSprite(ctx, 'heroine', 'idle0', x, y, false);
+      break;
+    }
+  }
+  // fade in / out of each scene
+  const edge = Math.min(t, S.dur - t);
+  if (edge < 40) { ctx.fillStyle = `rgba(0,0,0,${1 - edge / 40})`; ctx.fillRect(0, 0, W, Hh); }
+}

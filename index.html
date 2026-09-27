@@ -64,6 +64,11 @@
   #center button { font: inherit; font-size: 0.85em; color: #f4f0ff; background: linear-gradient(#2b3c9c, #101a5c);
                    border: 0.18em solid #e8e8f8; border-radius: 0.4em; padding: 0.5em 1em; cursor: pointer; }
   #center.dark { background: rgba(0, 0, 0, 0.62); }
+  #center.op { justify-content: flex-end; padding-bottom: 12vh; pointer-events: none; }
+  #center .opening { max-width: 86vw; text-align: center; }
+  #center .opening p { margin: 0.5em 0; font-size: max(0.9em, 13px); color: #ece6ff; text-shadow: 0.1em 0.1em 0 #000;
+                       opacity: 0; transition: opacity 1.2s; }
+  #center .opening p.on { opacity: 1; }
   #center img.memory { max-width: 92vw; max-height: 86vh; image-rendering: pixelated; box-shadow: 0 0 2em #000; }
   #center .title-menu { flex-direction: column; align-items: center; gap: 0.5em; margin: 0; }
   /* keep the key visual's two figures (left of centre) clear */

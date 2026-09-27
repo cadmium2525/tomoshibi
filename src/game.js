@@ -53,11 +53,11 @@ class Game {
       Sfx.unlock();
       const btn = e.target.closest('button');
       if (btn && btn.dataset.cmd) { e.preventDefault(); this.menuCommand(btn.dataset.cmd); return; }
-      if (this.state === 'cutscene') Input.tap('jump');     // advance the letter
+      if (this.state === 'cutscene' || this.state === 'opening') Input.tap('jump');     // advance the letter / the opening
       else if (this.state !== 'pause') Input.tap('start');     // also closes a page being read
     });
     document.addEventListener('pointerdown', (e) => {
-      if (this.state === 'cutscene' && !e.target.closest('#touch') && !e.target.closest('#center')) Input.tap('jump');
+      if ((this.state === 'cutscene' || this.state === 'opening') && !e.target.closest('#touch') && !e.target.closest('#center')) Input.tap('jump');
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
@@ -266,7 +266,7 @@ class Game {
   update() {
     this.st++;
     // during cutscenes the on-screen pad is hidden (a tap anywhere advances)
-    const cut = this.state === 'cutscene';
+    const cut = this.state === 'cutscene' || this.state === 'opening';
     if (cut !== this.cutUi) {
       this.cutUi = cut; document.body.classList.toggle('incut', cut);
       if (cut) for (const k in Input.virt) Input.virt[k] = false;     // a held stick must not stay held
@@ -281,6 +281,9 @@ class Game {
         if (Input.pressed('jump') || Input.pressed('start') || Input.pressed('attack')) {
           this.menuCommand(this.titleSave && this.titleSel === 0 ? 'continue' : 'newgame');
         }
+        return;
+      case 'opening':
+        this.updateOpening();
         return;
       case 'cutscene':
         this.updateCutscene();
@@ -384,6 +387,37 @@ class Game {
     this.collected = new Set();
     this.chapter = 1; useChapter(1);
     this.load(null);
+    this.startOpening();
+  }
+
+  // ---- the opening (before the prologue) ------------------------------------------
+  startOpening() {
+    this.state = 'opening'; this.op = { i: 0, t: 0, shown: -1 };
+    this.ui.hud.style.display = 'none'; this.ui.skip.style.display = 'block';
+    this.showOpeningText();
+  }
+  showOpeningText() {
+    const op = this.op, S = OPENING[op.i];
+    // lines come one by one over the scene
+    const n = Math.min(S.lines.length, 1 + Math.floor(op.t / ((S.dur - 80) / S.lines.length)));
+    if (n === op.shown) return;
+    op.shown = n;
+    this.showCenter(`<div class="opening">${S.lines.map((l, i) => `<p class="${i < n ? 'on' : ''}">${l}</p>`).join('')}</div>`, false, false, 'op');
+  }
+  updateOpening() {
+    const op = this.op, S = OPENING[op.i];
+    op.t++;
+    if (Input.pressed('start')) { this.finishOpening(); return; }
+    const next = () => { op.i++; op.t = 0; op.shown = -1; if (op.i >= OPENING.length) this.finishOpening(); else this.showOpeningText(); };
+    if (Input.pressed('jump') || Input.pressed('attack')) {
+      if (op.shown < S.lines.length) op.t = Math.max(op.t, S.dur - 80);     // the rest of the lines at once
+      else if (op.t < S.dur - 40) op.t = S.dur - 40;                          // then on to the next scene
+    }
+    if (op.t >= S.dur) { next(); return; }
+    this.showOpeningText();
+  }
+  finishOpening() {
+    this.op = null; this.hideCenter();
     this.startPrologue();
   }
 
@@ -1481,6 +1515,7 @@ class Game {
   // ---- render --------------------------------------------------------------------
   render() {
     const ctx = this.ctx;
+    if (this.state === 'opening' && this.op) { drawOpening(ctx, this.op); return; }
     const sx = this.shake > 0 ? Math.round(rand(-this.shake, this.shake)) : 0;
     const sy = this.shake > 0 ? Math.round(rand(-this.shake, this.shake)) : 0;
     const cx = Math.round(this.cam.x) + sx, cy = Math.round(this.cam.y) + sy;
