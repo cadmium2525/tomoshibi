@@ -7,7 +7,7 @@ window.autoplay4 = function () {
   const fail = (m) => { note('FAIL ' + m); throw new Error(m + '\n' + log.join('\n')); };
   function frames(n, keys = [], taps = []) {
     T.run(n, keys, taps);
-    if (game.state === 'gameover') fail('gameover ' + game.goReason);
+    if (game.state === 'gameover' && !frames.rescuing) fail('gameover ' + game.goReason);
     if (Y().state === 'carried' && !frames.rescuing) { frames.rescuing = true; fight(); frames.rescuing = false; }
     if (game.state === 'read') { T.run(24); T.run(2, [], ['KeyZ']); note('read a page'); }
     if (game.state === 'cutscene') { let c = 0; while (game.state === 'cutscene' && c++ < 3000) T.run(1, [], c % 20 === 0 ? ['KeyZ'] : []); note('scene'); }
@@ -110,11 +110,54 @@ window.autoplay4 = function () {
   if (Math.abs(L('L5').y - L('L5').y1) > 1) fail('L5 did not reach the top');
   note('top of the wall');
   fight(); if (Y().mode === 'wait') call(); walkTo(99); fight(); waitFor(() => herNear(60), 600, 'into the lamp room');
-  // --- G: the flood of shadows
+  // --- G: the shadow moth
+  frames.rescuing = true;                       // from here on the loop below looks after her
   walkTo(92); waitFor(() => game.boss || game.bossDone, 600, 'boss begins');
-  let turns = 0;
-  fight(() => game.boss && !game.bossDone);
-  note('boss done');
+  let n = 0, losses = 0;
+  const T0 = game.stats.time;
+  while (!game.bossDone && n++ < 80000) {
+    if (game.state === 'gameover') {            // lost her: from the last lamp, like a player would
+      if (++losses > 4) fail('lost to the moth 5 times');
+      note('lost to the moth, again from the shrine');
+      T.run(80); T.run(2, [], ['KeyZ']); frames(10);
+      if (Y().mode === 'wait') call();
+      walkTo(92); waitFor(() => game.boss || game.bossDone, 900, 'boss begins again');
+      continue;
+    }
+    const M = game.moth, P6 = game.pedestals.find((p) => p.id === 'P6');
+    if (!M || game.state !== 'play') { frames(1); continue; }
+    const hx = H().x, keys = [];
+    const carrier = Y().state === 'carried' ? Y().carriedBy : null;
+    const near = game.shadows.filter((s) => s.alive && s.state !== 'die' && s.state !== 'emerge' && Math.abs(s.x - hx) < 90)
+      .sort((a, b) => Math.abs(a.x - hx) - Math.abs(b.x - hx))[0];
+    const at = (x, strike) => {                 // go to x and swing at whatever is there
+      const dx = x - H().x;
+      if (Math.abs(dx) > 18) keys.push(dx > 0 ? 'ArrowRight' : 'ArrowLeft');
+      else if (sign(dx) !== H().facing && Math.abs(dx) > 2) keys.push(dx > 0 ? 'ArrowRight' : 'ArrowLeft');
+      else if (strike && H().state === 'normal' && n % 5 === 0) keys.push('KeyX');
+    };
+    if (carrier === M || M.state === 'dive') {
+      at(M.x, true);
+      if (carrier === M && Math.abs(M.x - H().x) < 24 && H().onGround && n % 3 === 0) keys.push('KeyZ');
+    } else if (carrier) at(carrier.x, true);
+    else if (M.state === 'down') at(M.x - 20 * sign(M.x - H().x || 1), true);
+    else if (near) at(near.x, true);
+    else if (!P6.on) {                          // get her back onto the pedestal
+      if (Y().mode === 'wait' && Y().state === 'normal') call();
+      else if (Math.abs(tile(H().x) - 83.4) > 0.3) at(83.4 * 16, false);
+      else if (Y().state === 'normal' && Y().onGround && Math.abs(Y().x - P6.x) <= 9 && Math.abs(Y().vx) < 0.05) call();
+    } else {
+      const want = M.hover > 0 ? (tile(M.x) < 80.5 ? -1 : 1) : 0;   // once it hangs at an end, turn the light on it
+      const cur = P6.dir[1] === -1 ? 0 : P6.dir[0];
+      if (Math.abs(tile(H().x) - 81.9) > 0.4) at(81.9 * 16, false);
+      else if (want !== cur) { up(); continue; }
+    }
+    frames(1, keys);
+  }
+  frames.rescuing = false;
+  if (!game.bossDone) fail('the moth is still up');
+  note('boss done ' + JSON.stringify({ grabs: game.stats.grabs, losses, seconds: Math.round((game.stats.time - T0) / 60) }));
+  frames(10);
   // --- the great lamp: turn the pedestal's light upward
   if (Y().mode === 'wait') call();
   toPedestal('P6', 83.4);

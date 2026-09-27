@@ -83,8 +83,8 @@ window.collectTest = function (only = null) {
       walk(61.4);
     },
     c4f4: () => { start(4); tp(103, 24, 101.5); hop(102.6); hop(103.3); walk(103.4); },
-    c4f5: () => { start(4); game.bossDone = true; tp(70, 24, 68); walk(73.5); for (let i = 0; i < 6; i++) hop(74.6); walk(78.5); },
-    c4j3: () => { start(4); game.bossDone = true; tp(70, 24, 68); walk(73.5); for (let i = 0; i < 6; i++) hop(74.6); walk(78.5); walk(79.3); hop(82.4); walk(83.4); },
+    c4f5: () => { start(4); game.bossDone = true; tp(80, 24, 78); walk(73.5); for (let i = 0; i < 6; i++) hop(74.6); walk(78.5); },
+    c4j3: () => { start(4); game.bossDone = true; tp(80, 24, 78); walk(73.5); for (let i = 0; i < 6; i++) hop(74.6); walk(78.5); walk(79.3); hop(82.4); walk(83.4); },
   };
   const out = [];
   for (const id in tests) {

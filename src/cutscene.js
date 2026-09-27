@@ -46,6 +46,12 @@ const Cut = {
     update: (g, s, t) => !s.ok || (t > 40 && advance()),
     end: (g) => g.hideCenter(),
   }),
+  // a line of text on the black screen ("that night...")
+  caption: (text, n = 150) => ({
+    start: (g) => g.showCenter(`<div class="caption">${text}</div>`, true),
+    update: (g, s, t) => t >= n || (t > 40 && advance()),
+    end: (g) => g.hideCenter(),
+  }),
   chapter: (num, title) => ({
     start: (g) => g.showChapter(num, title),
     update: (g, s, t) => t >= 170,
@@ -162,18 +168,21 @@ function logbookScript() {
 function bossStartScript() {
   return [
     hold(),
-    Cut.run((g) => { g.shake = 8; Sfx.play('emerge'); g.heroine.emote('!', 80); }),
-    Cut.talk('ルミナ', 'やだ……！ 光が、とまらない……！'),
+    Cut.run((g) => { g.shake = 4; Sfx.play('emerge'); g.heroine.emote('!', 80); }),
+    { update: (g, s, t) => { g.moth.update(g); return g.moth.state === 'cruise' || t > 400; } },   // it comes down out of the dome
+    Cut.talk('ルミナ', '……おおきな、ちょうちょ？'),
+    Cut.talk('グレイ', '影蛾（かげが）だ……！ 火の消えた大灯に 巣くって、十三年、灯りを 待っていたのか。'),
+    Cut.talk('グレイ', 'あれは 光に 群がる。 ルミナ、台座へ！ 光の筋で 翅を 焼くんだ。'),
     Cut.walk('heroine', 80, 1),
-    Cut.talk('グレイ', 'ルミナ！ 台座から 離れるな！ その光で 影を 還すんだ！'),
-    Cut.run((g) => g.notify('boss_start', 200)),
+    Cut.talk('グレイ', '筋の向きは わたしが 変える。 ……落ちてきたら、灯竿の 出番だ。'),
   ];
 }
 function afterBossScript() {
   return [
     hold(),
     Cut.wait(40),
-    Cut.talk('グレイ', 'ルミナ。 ……すまなかった。'),
+    Cut.talk('ルミナ', '……光の こなに なって、消えちゃった。 あの子も、ずっと 光が ほしかったのかな。'),
+    Cut.talk('グレイ', '……ルミナ。 すまなかった。'),
     Cut.talk('グレイ', 'あの夜、君を 暗闇へ 運んだのは わたしだ。 許してほしくて 迎えに行ったんじゃない。'),
     Cut.talk('グレイ', '……ただ、君に 光のある場所を 見せたかった。'),
     Cut.talk('ルミナ', '……わたしを 連れて行ったのも、迎えに来てくれたのも、あなただったんだね。'),

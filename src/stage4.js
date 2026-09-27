@@ -70,7 +70,7 @@ function buildStage4() {
   ent('shrine', 70, 83, { id: 's3' });
   ent('logbook', 84, 83);
   // pull-out drawers climbing the last bookcase (a page on top)
-  fill(94, 83, 94, 83); fill(95, 81, 95, 83); fill(96, 79, 96, 83); fill(97, 77, 98, 83);
+  fill(94, 83, 94, 83); fill(95, 81, 95, 83); fill(96, 79, 96, 83); fill(97, 77, 99, 83);   // (flush with the wall: no slot to fall into)
   carve(66, 64, 68, 73);
   ent('lift', 66, 83, { id: 'L3', w: 3, dy: -20, src: ['P3L'] });
   ent('pedestal', 67, 83, { id: 'P3L', lift: 'L3', dir: [1, 0] });
@@ -105,8 +105,8 @@ function buildStage4() {
   room(60, 6, 99, 23);
   ent('shrine', 96, 23, { id: 's6' });
   ent('pedestal', 80, 23, { id: 'P6', dir: [1, 0], turn: true });
-  ent('mirror', 62, 23, { id: 'M6a', kind: 1 });
-  ent('mirror', 98, 23, { id: 'M6b', kind: 0 });
+  ent('mirror', 71, 23, { id: 'M6a', kind: 1 });
+  ent('mirror', 90, 23, { id: 'M6b', kind: 0 });
   ent('boss', 80, 23, { x0: 62, x1: 98 });
   ent('greatlamp', 80, 9);
   fill(76, 12, 79, 12); fill(81, 12, 84, 12);         // the lamp's dais (a slot in the middle lets the light through)
@@ -148,7 +148,7 @@ const CH4_PAGES = {
 const CH4_TEXT = {
   sign_mirror: N('碑') + '「光は まっすぐ進み、鏡に 折れる」<br>' + N('ヒント') + 'ルミナを 灯台座に 立たせると 光の筋が 伸びる。鏡の前で {up} を押すと 向きが変わる。',
   boss_start: N('グレイ') + 'ルミナ！ 台座から 離れるな！ 光で 影を 還すんだ！',
-  boss_turn: N('ヒント') + '台座の前で {up} を押すと、光の向きが変わる（右 → 上 → 左）。',
+  boss_turn: N('ヒント') + '台座のそばで {up}：光の筋の向きが変わる（右 → 上 → 左）。左右の筋は 鏡で 上へ折れる。',
   lamp_hint: N('グレイ') + '……ルミナ。 台座の光を、上へ。 大灯に 届けてくれ。',
   flicker: N('グレイ') + 'ルミナの光が 揺らいでいる……。 そばを 離れないように しなければ。',
 };

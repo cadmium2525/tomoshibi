@@ -86,7 +86,7 @@ class Game {
     this.dawnDone = false; this.sun = 0;
     this.poles = []; this.sanctuaries = [];
     this.pedestals = []; this.mirrors = []; this.receptors = []; this.lifts = []; this.wheels = []; this.beams = [];
-    this.logbook = null; this.bossSpot = null; this.boss = null; this.bossDone = false; this.greatLamp = null;
+    this.logbook = null; this.bossSpot = null; this.boss = null; this.bossDone = false; this.greatLamp = null; this.moth = null;
     this.flicker = false; this.flickT = 0;
     this.guards = []; this.lamps = []; this.fear = 0; this.fearCd = 0; this.nooks = []; this.martaSpot = null; this.npcSpots = [];
     this.darks = (stage.darks || []).map(([x0, y0, x1, y1]) => ({ x0: x0 * TILE, y0: y0 * TILE, x1: (x1 + 1) * TILE, y1: (y1 + 1) * TILE }));
@@ -389,17 +389,21 @@ class Game {
     this.state = 'cutscene';
     this.ui.hud.style.display = 'none';
     this.ui.skip.style.display = 'block';
-    this.cutSkip = () => this.finishIntro();
+    this.cutSkip = () => this.finishIntro(true);
     this.cut = new Cutscene(this, C.intro(), () => this.finishIntro());
   }
 
-  finishIntro() {
+  finishIntro(skipped = false) {
     this.cut = null;
-    const hero = this.hero, h = this.heroine, p = this.startPos;
+    const hero = this.hero, h = this.heroine;
+    // watched to the end: play starts right where the scene left them (no jump);
+    // skipped: they are put at the start
+    const p = skipped || !CHAPTERS[this.chapter].intro ? this.startPos : { hx: hero.x, hy: hero.y, yx: h.x, yy: h.y };
     hero.setState('normal'); hero.pose = null; hero.kinematic = false; hero.front = false;
     h.setState('normal'); h.pose = null; h.mode = 'follow';
     if (CHAPTERS[this.chapter].startHooded) h.hooded = true;
     hero.x = p.hx; hero.y = p.hy; h.x = p.yx; h.y = p.yy; hero.facing = h.facing = 1;
+    this.startPos = p;
     hero.vx = hero.vy = h.vx = h.vy = 0;
     hero.checkGround(this.world); h.checkGround(this.world);
     hero.lastSafe = { x: hero.x, y: hero.y };
@@ -733,6 +737,9 @@ class Game {
       if (hero.hitList.has(gd) || !overlap(box, gd.box())) continue;
       if (gd.bump(this, hero.facing)) { hero.hitList.add(gd); this.shake = 1.5; }
     }
+    const M = this.moth, mb = M && M.hurtBox();
+    if (mb && !hero.hitList.has(M) && overlap(box, mb) && M.hit(this, hero.facing)) { hero.hitList.add(M); this.hitstop = 5; this.shake = 3; }
+    else if (M && !mb && !hero.hitList.has(M) && M.inWings(box)) { hero.hitList.add(M); M.whiff(this); }
     for (const s of this.shadows) {
       if (!s.alive || hero.hitList.has(s)) continue;
       if (overlap(box, s.box())) {
@@ -843,6 +850,9 @@ class Game {
     if (this.heroine.state !== 'carried') out.push(this.heroine);
     return out;
   }
+
+  // how often a shadow slips out of the way of Grey's pole: more, the further they go
+  dodgeChance() { return [0, 0.12, 0.22, 0.3, 0.35][this.chapter] ?? 0.4; }
 
   spawnShadow(x, y) {
     const p = new Portal(x, y);
@@ -991,37 +1001,31 @@ class Game {
     }
     if (!this.boss) {
       if (hero.onGround && hero.x < B.x1 - 5 * TILE && Math.abs(hero.y - B.y) < 30) {
-        this.boss = { phase: 1, t: 0, killed: 0, spawned: 0 };
+        this.boss = { t: 0, spawned: 0 };
+        this.moth = new Moth(B);
         this.flicker = false;
         this.startScene(bossStartScript(), () => { this.heroine.mode = 'wait'; this.notify('boss_turn', 300); });
         return true;
       }
       return false;
     }
-    const S = this.boss;
+    const S = this.boss, M = this.moth;
     S.t++;
+    M.update(this);
+    if (this.state !== 'play') return true;       // it carried her off
+    // from the second fall on, the dust off its wings wakes shadows on the floor
     const alive = this.shadows.filter((s) => s.alive && s.state !== 'die');
-    const spawnAt = (left, fly) => {
-      const x = left ? B.x0 + 3 * TILE : B.x1 - 3 * TILE;
-      if (fly) { const f = new FlyShadow(x, B.y - 120); this.shadows.push(f); return f; }
-      return this.spawnShadow(x, B.y);
-    };
-    if (S.phase === 1) {                        // shadows from the floor, on both sides
-      if (S.spawned < 7 && alive.length < 3 && S.t % 70 === 0) { spawnAt(S.spawned % 2 === 0, false); S.spawned++; }
-      if (S.spawned >= 7 && !alive.length) { S.phase = 2; S.spawned = 0; S.t = 0; this.say(h, '……うえから くる！', 'cry', 90); }
-    } else if (S.phase === 2) {                 // then out of the dark overhead
-      if (S.spawned < 6 && alive.length < 3 && S.t % 80 === 0) { spawnAt(S.spawned % 2 === 1, true); S.spawned++; }
-      if (S.spawned >= 6 && !alive.length) { S.phase = 3; S.t = 0; this.say(this.hero, '……大きいのが 来るぞ！', 'hero', 90); }
-    } else if (S.phase === 3) {                 // the great shadow
-      if (S.t === 60) {
-        const p = new Portal(B.x0 + 4 * TILE, B.y); this.portals.push(p);
-        S.big = new BigShadow(p); this.shadows.push(S.big); Sfx.play('emerge'); this.shake = 6;
-      }
-      if (S.t > 60 && S.big && !S.big.alive) {
-        this.boss = null; this.bossDone = true;
-        this.startScene(afterBossScript(), () => { this.heroine.mode = 'wait'; this.notify('lamp_hint', 300); });
-        return true;
-      }
+    if (M.phase >= 2 && M.state !== 'die' && !alive.length && S.t % (M.phase === 2 ? 480 : 400) === 0) {
+      const left = (S.spawned = (S.spawned || 0) + 1) % 2 === 0;
+      for (let i = 0; i < 10; i++) this.particles.add({ x: M.x + rand(-30, 30), y: M.y - rand(0, 20), vx: rand(-0.3, 0.3), vy: rand(0.4, 1.2), life: 60, col: '#8a70b0', size: 1 });
+      this.spawnShadow(left ? B.x0 + 4 * TILE : B.x1 - 4 * TILE, B.y);
+    }
+    this.bossDark = M.phase >= 3;
+    if (!M.alive) {
+      this.moth = null; this.boss = null; this.bossDone = true; this.bossDark = false;
+      for (const s of this.shadows) if (s.alive && s.state !== 'die') s.setState('die');
+      this.startScene(afterBossScript(), () => { this.heroine.mode = 'wait'; this.notify('lamp_hint', 300); });
+      return true;
     }
     return false;
   }
@@ -1041,6 +1045,7 @@ class Game {
         if (m) { x = m.x; y = m.y; this.beams.push([start, { x, y }]); [dx, dy] = m.reflect([dx, dy]); start = { x, y }; lastM = m; turns++; continue; }
         const r = this.receptors.find((q) => Math.abs(q.x - x) < 7 && Math.abs(q.y - y) < 7);
         if (r) { r.hit = true; break; }
+        if (this.moth && this.moth.inBeam(x, y)) { this.moth.lit = true; break; }
         if (w.boxHit(x - 1, y - 1, x + 1, y + 1)) break;
         for (const s of this.shadows) {
           if (!s.alive || s.state === 'die' || s.state === 'emerge') continue;
@@ -1216,6 +1221,7 @@ class Game {
       if (next) Save.write({ chapter: next.num, cp: null, fresh: true, cleared, stats: this.stats, collected: [...this.collected] });
       else Save.write({ chapter: this.chapter, cp: null, fresh: false, cleared, stats: this.stats, collected: [...this.collected] });
       this.ui.hud.style.display = 'none'; this.ui.msg.style.display = 'none';
+      this.toastT = 0; this.ui.toast.style.display = 'none';     // (a fragment found just before the end)
       for (const b of this.bubbleEls.values()) b.t = 0;
       const s = this.stats;
       const sec = Math.floor(s.time / 60);
@@ -1262,7 +1268,12 @@ class Game {
     // keep her in the frame too (more strongly while she is being carried off)
     const k = h.state === 'carried' ? 0.5 : Math.abs(h.x - hero.x) < 280 && Math.abs(h.y - hero.y) < 200 ? 0.3 : 0;
     fx = lerp(fx, h.x, k); fy = lerp(fy, h.y - 24, k * 1.3);
-    const tx = fx - VW / 2, ty = fy - VH * 0.56;
+    let tx = fx - VW / 2, ty = fy - VH * 0.56;
+    if (this.moth) {                              // the moth's round: hold the whole lamp room in view
+      const B = this.bossSpot, off = hero.x - B.x;
+      tx = B.x - VW / 2 + sign(off) * Math.max(0, Math.abs(off) - 10 * TILE);
+      ty = B.y - Math.round(VH * 0.78);           // (the floor stays clear of the message window)
+    }
     if (snap) { c.x = tx; c.y = ty; } else { c.x += (tx - c.x) * 0.12; c.y += (ty - c.y) * 0.1; }
     c.x = clamp(c.x, 0, this.world.pw - VW); c.y = clamp(c.y, 0, this.world.ph - VH);
   }
@@ -1416,6 +1427,10 @@ class Game {
       }
     }
     if (h.state === 'carried' && !h.carriedBy) h.draw(ctx, cx, cy);
+    if (this.moth) {
+      this.moth.draw(ctx, cx, cy);
+      if (h.carriedBy === this.moth) drawSprite(ctx, 'heroine', h.frame(), h.x - cx, h.y - cy, h.facing < 0);
+    }
     this.hero.draw(ctx, cx, cy);
     if (h.state === 'hand') this.drawHands(ctx, cx, cy);
     this.particles.draw(ctx, cx, cy);
@@ -1509,7 +1524,7 @@ class Game {
     const hr = this.hero, inDark = this.darks.some((d) => hr.x >= d.x0 && hr.x < d.x1 && hr.y > d.y0 && hr.y <= d.y1);
     lc.fillStyle = inDark ? 'rgba(2,2,6,0.95)'
       : this.world.theme === 'forest' ? `rgba(8,6,24,${0.46 * (1 - 0.85 * this.sun)})`
-      : this.world.theme === 'town' ? 'rgba(6,5,16,0.6)' : this.world.theme === 'tower' ? 'rgba(10,6,14,0.55)' : 'rgba(5,3,14,0.64)';
+      : this.world.theme === 'town' ? 'rgba(6,5,16,0.6)' : this.world.theme === 'tower' ? (this.bossDark ? 'rgba(6,3,10,0.8)' : 'rgba(10,6,14,0.55)') : 'rgba(5,3,14,0.64)';
     lc.fillRect(0, 0, VW, VH);
     lc.globalCompositeOperation = 'destination-out';
     const L = this.lights();

@@ -376,7 +376,7 @@ class Heroine extends Body {
       case 'carried': {
         const s = this.carriedBy;
         if (!s) { this.setState('down'); break; }
-        const off = Sheets.shadow.carry[s.frame()] || [0, -34];
+        const off = s.carryOff ? s.carryOff() : Sheets.shadow.carry[s.frame()] || [0, -34];
         this.x = s.x + off[0] * s.facing; this.y = s.y + off[1] + (s.sinkOffset || 0);
         this.facing = s.facing;
         if (this.t % 50 === 1) game.say(this, ['たすけて！', 'いやっ…！', 'はなして！'][Math.floor(this.t / 50) % 3], 'cry', 45);
@@ -583,7 +583,7 @@ class Shadow extends Body {
     super(portal.x, portal.y, 7, 40);
     this.portal = portal; portal.users++;
     this.state = 'emerge'; this.t = 0; this.hp = 3; this.flash = 0; this.alive = true;
-    this.swipeCd = 90; this.animT = 0; this.sinkOffset = 0; this.wave = null;
+    this.swipeCd = 90; this.animT = 0; this.sinkOffset = 0; this.wave = null; this.dodgeCd = 0;
   }
   setState(s) { this.state = s; this.t = 0; }
   isThreat() { return this.alive && this.state !== 'die' && this.state !== 'emerge'; }
@@ -592,7 +592,17 @@ class Shadow extends Body {
     this.t++; this.animT++;
     if (this.flash > 0) this.flash--;
     if (this.swipeCd > 0) this.swipeCd--;
+    if (this.dodgeCd > 0) this.dodgeCd--;
     const w = game.world, h = game.heroine, hero = game.hero;
+    // Grey's swing: now and then it slips back out of reach, and comes straight back at him
+    if (this.state === 'seek' && hero.state === 'attack' && hero.t === 2 && this.dodgeCd <= 0) {
+      const dx = this.x - hero.x;
+      if (sign(dx) === hero.facing && Math.abs(dx) < 40 && Math.abs(hero.y - this.y) < 30 && Math.random() < game.dodgeChance()
+        && w.pointSolid(this.x + hero.facing * 26, this.y + 4, this)) {
+        this.setState('dodge'); this.vx = hero.facing * 2.4; this.vy = -2.2; this.dodgeCd = 150; this.facing = -hero.facing;
+        Sfx.play('swing');
+      }
+    }
     // smoky wisps
     if (this.state !== 'die' && this.t % 4 === 0) {
       game.particles.add({ x: this.x + rand(-8, 8), y: this.y - rand(10, 40) + this.sinkOffset, vx: rand(-0.2, 0.2), vy: rand(-0.6, -0.2), life: 26, col: Math.random() < 0.6 ? '#140a20' : '#3a2058', size: 2, shrink: true });
@@ -663,6 +673,11 @@ class Shadow extends Body {
         this.vx = approach(this.vx, 0, 0.12);
         if (this.t >= 30) this.setState('seek');
         break;
+      case 'dodge':
+        this.vx = approach(this.vx, 0, 0.1);
+        if (this.t % 2 === 0) game.particles.add({ x: this.x + rand(-6, 6), y: this.y - rand(4, 40), vx: -this.vx * 0.3, vy: rand(-0.3, 0.3), life: 18, col: '#3a2058', size: 2, shrink: true });
+        if (this.t >= 22 && this.onGround) { this.swipeCd = 0; this.setState('seek'); }
+        break;
       case 'die':
         this.vx = 0;
         if (this.t % 2 === 0) {
@@ -721,6 +736,7 @@ class Shadow extends Body {
       case 'swipe': return this.t < 12 ? 'reach0' : 'reach1';
       case 'carry': case 'sink': return 'carry' + (Math.floor(this.animT / 10) % 4);
       case 'hurt': return 'hurt';
+      case 'dodge': return 'reach0';
       case 'die': return 'hurt';
       case 'emerge': return 'walk0';
     }
@@ -909,6 +925,7 @@ class Guard extends Body {
         const back = this.x0 !== null ? clamp(this.x, this.x0, this.x1) : this.home.x;
         if (this.walkTo(game, back, 0.6)) { this.facing = this.baseFacing; this.setState('patrol'); }
         if (seen) this.setState('alert');
+        else this.checkLamps(game);
         break;
       }
       case 'investigate': {                     // walks over to put out a lamp someone lit
@@ -976,28 +993,214 @@ class Guard extends Body {
 }
 
 // ---------------------------------------------------------------------------
-// The great shadow of chapter 4: a tall shadow with long arms. Slow, hard to
-// knock back, and it takes a long time in the light (or many blows) to return.
-class BigShadow extends Shadow {
-  constructor(portal) {
-    super(portal);
-    this.hw = 11; this.h = 66; this.hp = 12; this.big = true;
+// 影蛾 (the shadow moth): chapter 4's boss. It nested in the dead great lamp and
+// waited thirteen years for a light. It flutters out of the pole's reach, back and
+// forth across the lamp room, and now and then dives at Lumina to carry her up
+// into the dark of the dome. Only her beam can burn its wings (Grey turns the
+// pedestal: straight up, or left / right onto the mirrors); burnt, it falls, and
+// on the floor Grey's pole finally reaches it. Three blows a fall, three falls.
+class Moth {
+  constructor(B) {
+    this.B = B; this.cx = B.x; this.cy = B.y - 6.5 * TILE; this.A = 10 * TILE;
+    this.x = B.x; this.y = B.y - 19 * TILE;               // up in the dome
+    this.state = 'enter'; this.t = 0; this.animT = 0; this.dir = 1; this.hover = 0;
+    this.hp = 9; this.hits = 0; this.phase = 1; this.beamT = 0; this.lit = false;
+    this.diveCd = 300; this.flash = 0; this.facing = 1; this.alive = true; this.falls = 0;
   }
-  walk(game, dir, speed) { super.walk(game, dir, speed * 0.55); }
+  setState(s) { this.state = s; this.t = 0; }
+  P() {
+    return [null, { speed: 1, need: 34, dive: 480, down: 330 }, { speed: 1.3, need: 38, dive: 380, down: 290 },
+      { speed: 1.6, need: 42, dive: 300, down: 260 }][Math.min(3, this.phase)];
+  }
+  home() { return { x: clamp(this.x, this.cx - this.A, this.cx + this.A), y: this.cy + TILE * Math.sin(this.animT * 0.025) }; }
+  // the pole through its wings in the air: dust, nothing more
+  inWings(box) { return ['cruise', 'aim', 'rise', 'enter'].includes(this.state) && overlap(box, { x0: this.x - 36, x1: this.x + 36, y0: this.y - 34, y1: this.y + 8 }); }
+  whiff(game) {
+    Sfx.play('push');
+    for (let i = 0; i < 8; i++) game.particles.add({ x: game.hero.x + game.hero.facing * 20 + rand(-6, 6), y: this.y - rand(0, 20), vx: rand(-0.6, 0.6), vy: rand(-0.6, 0.2), life: 26, col: '#6a58a0', size: 1 });
+    if (!game.flags.mothWhiff) { game.flags.mothWhiff = true; game.say(game.hero, '……灯竿では 手応えがない。 光で 焼かねば！', 'hero', 120); }
+  }
+  // the wings catch the beam
+  inBeam(x, y) { return ['cruise', 'aim', 'dive'].includes(this.state) && Math.abs(x - this.x) < 22 && y > this.y - 30 && y < this.y + 2; }
+  hurtBox() {
+    if (this.state === 'down') return { x0: this.x - 22, x1: this.x + 22, y0: this.y - 20, y1: this.y };
+    if (this.state === 'dive' || this.state === 'flee') return { x0: this.x - 18, x1: this.x + 18, y0: this.y - 26, y1: this.y + 16 };
+    return null;
+  }
+  carryOff() { return [0, 34]; }            // she hangs from its legs
+  update(game) {
+    this.t++; this.animT++;
+    if (this.flash > 0) this.flash--;
+    const h = game.heroine, B = this.B, P = this.P();
+    // the beam burns
+    if (this.lit) {
+      this.beamT++;
+      if (this.t % 2 === 0) game.particles.add({ x: this.x + rand(-34, 34), y: this.y - rand(4, 26), vx: rand(-0.4, 0.4), vy: rand(-1, -0.2), life: 22, col: Math.random() < 0.5 ? '#ffd080' : '#fff4d0', size: 1 });
+      if (this.t % 12 === 0) Sfx.play('push');
+    } else this.beamT = Math.max(0, this.beamT - 0.3);
+    this.lit = false;
+    // wisps of shadow off the wings
+    if (this.state !== 'die' && this.t % 3 === 0) game.particles.add({ x: this.x + rand(-36, 36), y: this.y - rand(0, 26), vx: rand(-0.2, 0.2), vy: rand(-0.4, 0.1), life: 24, col: Math.random() < 0.6 ? '#140a20' : '#3a2058', size: 2, shrink: true });
+    const burnt = () => {
+      if (this.beamT < P.need) return false;
+      this.beamT = 0; this.setState('fall'); this.vy = 0; this.falls++;
+      Sfx.play('kill'); game.shake = 4;
+      game.particles.burst(this.x, this.y - 14, 18, { col: '#ffe0a0', life: 24, max: 2 });
+      return true;
+    };
+    switch (this.state) {
+      case 'enter': {                           // down from the dome onto its round
+        const p = this.home();
+        this.x += clamp(p.x - this.x, -1, 1); this.y += clamp(p.y - this.y, -1.2, 1.2);
+        if (Math.abs(p.y - this.y) < 1 && Math.abs(p.x - this.x) < 1) this.setState('cruise');
+        break;
+      }
+      case 'cruise': {
+        if (burnt()) break;
+        // back and forth across the room, hanging in the air a moment at each end.
+        // It knows the light: it turns back before a lit column. Turn the beam onto it where it is.
+        if (this.hover > 0) this.hover--;
+        else {
+          const lit = game.beams.some(([a, b]) => a.x === b.x && (a.x - this.x) * this.dir > 0 && Math.abs(a.x - this.x) < 44);
+          if (lit) { this.dir = -this.dir; game.particles.burst(this.x, this.y - 14, 6, { col: '#3a2058', life: 16, max: 1.2 }); }
+          this.x += this.dir * P.speed;
+          if (Math.abs(this.x - this.cx) >= this.A) { this.x = this.cx + sign(this.x - this.cx) * this.A; this.dir = -this.dir; this.hover = 70; }
+        }
+        this.facing = this.dir;
+        this.y = this.home().y + (this.hover ? Math.sin(this.animT * 0.15) * 2 : 0);
+        if (--this.diveCd <= 0 && h.grabbable() && !h.carriedBy) { this.setState('aim'); Sfx.play('emerge'); }
+        break;
+      }
+      case 'aim':                               // a shiver, then the dive
+        if (burnt()) break;
+        this.facing = sign(h.x - this.x) || this.facing;
+        if (this.t >= 45) { this.tx = h.x; this.ty = h.y - 34; this.setState('dive'); Sfx.play('swing'); }
+        break;
+      case 'dive': {
+        if (burnt()) break;
+        const dx = this.tx - this.x, dy = this.ty - this.y, d = Math.hypot(dx, dy);
+        if (d > 3) { this.x += dx / d * 3.2; this.y += dy / d * 3.2; }
+        if (h.grabbable() && !h.carriedBy && Math.abs(h.x - this.x) < 18 && Math.abs(h.y - 34 - this.y) < 20) {
+          h.carriedBy = this; h.setState('carried'); h.mode = 'follow';
+          this.setState('flee'); Sfx.play('grab'); game.stats.grabs++;
+          break;
+        }
+        if (d <= 3 || this.t > 160) { this.diveCd = P.dive; this.setState('rise'); }
+        break;
+      }
+      case 'flee':                              // up into the dark with her
+        // slowly while the pole can still reach it, then away
+        this.x += clamp(this.cx - this.x, -0.5, 0.5); this.y -= this.t < 120 ? 0.4 : 1.2;
+        if (this.y < B.y - 12 * TILE) { game.gameOver(); return; }
+        break;
+      case 'recoil':
+        this.x += this.vx; this.y += this.vy; this.vx *= 0.94; this.vy *= 0.94;
+        if (this.t > 30) this.setState('rise');
+        break;
+      case 'rise': {                            // back onto its round (the light cannot catch it rising)
+        const p = this.home(), dx = p.x - this.x, dy = p.y - this.y, d = Math.hypot(dx, dy);
+        if (d < 2) { this.setState('cruise'); break; }
+        this.x += dx / d * 1.6; this.y += dy / d * 1.6;
+        this.facing = sign(dx) || this.facing;
+        break;
+      }
+      case 'fall':
+        this.vy = Math.min(this.vy + 0.2, 4); this.y += this.vy;
+        this.x = clamp(this.x, B.x0 + 2 * TILE, B.x1 - 2 * TILE);
+        if (this.t % 3 === 0) game.particles.add({ x: this.x + rand(-20, 20), y: this.y - rand(0, 20), vx: rand(-0.3, 0.3), vy: -0.6, life: 30, col: '#ff9a50', size: 1 });
+        if (this.y >= B.y) {
+          this.y = B.y; this.setState('down'); this.hits = 0; game.shake = 5; Sfx.play('block');
+          if (this.falls === 1) game.say(game.hero, '落ちた……！ 今だ！', 'hero', 90);
+        }
+        break;
+      case 'down':                              // on the floor, wings smoking
+        if (this.t % 5 === 0) game.particles.add({ x: this.x + rand(-30, 30), y: this.y - rand(0, 8), vy: -0.5, life: 30, col: '#5a4a60', size: 2, shrink: true });
+        if (this.t > P.down) { this.diveCd = P.dive; this.setState('rise'); Sfx.play('emerge'); }
+        break;
+      case 'die':
+        if (this.t % 2 === 0) for (let i = 0; i < 4; i++) {
+          game.particles.add({ x: this.x + rand(-40, 40), y: this.y - rand(0, 28), vx: rand(-0.6, 0.6), vy: rand(-1.6, -0.3), life: rand(30, 60), col: ['#140a20', '#3a2058', '#8050c0', '#ffe9a8'][i], size: i < 2 ? 2 : 1, shrink: i < 2 });
+        }
+        if (this.t >= 140) this.alive = false;
+        break;
+    }
+  }
+  drop(game, dir) {
+    const h = game.heroine;
+    h.carriedBy = null; h.setState('down');
+    h.vx = -dir * 0.6; h.vy = -1; h.flash = 20;
+    game.say(h, 'きゃっ…！', 'her', 40);
+    Sfx.play('drop');
+  }
+  // Grey's pole: on the floor it hurts; in the air it only drives it off
   hit(game, dir) {
-    const ok = super.hit(game, dir);
-    if (ok) { this.vx *= 0.3; this.vy = 0; game.shake = 3; }
-    return ok;
+    if (this.state === 'down') {
+      this.hp--; this.hits++; this.flash = 10; game.shake = 3;
+      game.particles.burst(this.x, this.y - 12, 12, { col: '#e8d8ff', life: 16, max: 2 });
+      if (this.hp <= 0) { this.setState('die'); Sfx.play('kill'); game.shake = 8; return true; }
+      Sfx.play('hit');
+      if (this.hits >= 3) {                     // it tears itself off the floor, angrier
+        this.phase++; this.diveCd = 200; this.setState('rise'); Sfx.play('emerge'); game.shake = 6;
+        game.say(game.heroine, this.phase === 2 ? '……こなが、ふってくる！' : '……くらく なった……！', 'cry', 100);
+      }
+      return true;
+    }
+    if (this.state === 'dive' || this.state === 'flee') {
+      if (game.heroine.carriedBy === this) this.drop(game, dir);
+      this.flash = 10; this.vx = dir * 2.2; this.vy = -2.2; this.diveCd = this.P().dive;
+      this.setState('recoil'); Sfx.play('hit');
+      game.particles.burst(this.x, this.y - 12, 8, { col: '#e8d8ff', life: 14, max: 2 });
+      return true;
+    }
+    return false;
   }
   draw(ctx, cx, cy) {
-    const x = this.x - cx, y = this.y - cy;
-    ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.scale(1.7, 1.7);
-    const opt = {};
-    if (this.state === 'emerge') opt.clipBottom = 0;
-    if (this.state === 'sink') opt.clipBottom = 0;
-    if (this.state === 'die') opt.alpha = 1 - this.t / 36;
-    if (this.flash > 0 && (this.flash >> 1) % 2) opt.white = true;
-    drawSprite(ctx, 'shadow', this.frame(), 0, (this.sinkOffset || 0) / 1.7, this.facing < 0, opt);
+    ctx.save();                                 // drawn a size larger than its measurements
+    ctx.translate(Math.round(this.x - cx), Math.round(this.y - cy)); ctx.scale(1.25, 1.25);
+    this.drawAt(ctx);
+    ctx.restore();
+  }
+  drawAt(ctx) {
+    const x = 0, y = 0;
+    const down = this.state === 'down' || this.state === 'fall';
+    const dying = this.state === 'die' ? this.t / 140 : 0;
+    // wing beat: fast when it shivers before a dive, slow and flat on the floor
+    const rate = this.state === 'aim' ? 0.7 : this.state === 'dive' || this.state === 'flee' ? 0.35 : 0.18;
+    const f = down ? 0.45 + (this.state === 'down' ? 0.1 * Math.sin(this.animT * 0.5) : 0) : 0.3 + 0.7 * Math.abs(Math.cos(this.animT * rate));
+    const white = this.flash > 0 && (this.flash >> 1) % 2;
+    const burn = Math.min(1, this.beamT / this.P().need);
+    ctx.save();
+    ctx.globalAlpha = 1 - dying;
+    const body = y - (down ? 12 : 14);
+    const wing = (s, pts, fill, edge) => {
+      ctx.beginPath();
+      pts.forEach(([px, py], i) => { const X = x + s * px, Y = body + py * f; if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y); });
+      ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+      ctx.strokeStyle = edge; ctx.lineWidth = 1; ctx.stroke();
+    };
+    const dark = white ? '#f0e8ff' : '#150b22', mid = white ? '#ffffff' : '#2a1640';
+    const rim = burn > 0 ? `rgba(255,${Math.round(200 - 80 * burn)},120,${0.4 + 0.6 * burn})` : '#4a2e78';
+    for (const s of [-1, 1]) {
+      // hind wing, then fore wing (ragged trailing edge)
+      wing(s, [[3, 0], [26, 8], [32, 18], [20, 22], [8, 12]], dark, rim);
+      wing(s, [[2, -4], [18, -20], [40, -26], [44, -18], [38, -8], [30, -4], [34, 2], [22, 0], [14, 4]], mid, rim);
+      // an eye on each wing: the only warm thing about it
+      const ex = x + s * 26, ey = Math.round(body - 12 * f), r = Math.max(1, Math.round(4 * f));
+      ctx.fillStyle = dark; ctx.fillRect(ex - 4, ey - r, 8, r * 2);
+      ctx.fillStyle = '#6a48a8'; ctx.fillRect(ex - 2, ey - Math.ceil(r / 2), 4, Math.max(1, r));
+      ctx.fillStyle = this.state === 'aim' && (this.t >> 2) % 2 ? '#ffffff' : '#e8c070'; ctx.fillRect(ex, ey, 1, 1);
+    }
+    // body, feathered antennae, the two yellow points of its eyes
+    ctx.fillStyle = white ? '#ffffff' : '#0e0616';
+    ctx.fillRect(x - 3, body - 10, 6, 22); ctx.fillRect(x - 4, body - 6, 8, 12); ctx.fillRect(x - 2, body + 12, 4, 4);
+    ctx.fillStyle = '#3a2058'; for (let i = 0; i < 4; i++) ctx.fillRect(x - 4, body - 2 + i * 4, 8, 1);
+    ctx.strokeStyle = '#2a1640'; ctx.lineWidth = 1;
+    for (const s of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(x + s, body - 10); ctx.quadraticCurveTo(x + s * 6, body - 22, x + s * 12, body - 24); ctx.stroke();
+      ctx.fillStyle = '#2a1640';
+      for (let i = 0; i < 4; i++) ctx.fillRect(x + s * (4 + i * 2), body - 17 - i * 2, 1, 2);
+    }
+    ctx.fillStyle = '#ffe9a8'; ctx.fillRect(x - 3, body - 9, 1, 1); ctx.fillRect(x + 2, body - 9, 1, 1);
     ctx.restore();
   }
 }

@@ -534,6 +534,8 @@ class Lamp {
   constructor(e) { this.id = e.id; this.x = e.x; this.y = e.y; this.lit = false; this.by = null; this.t = 0; this.guard = e.guard || null; }
   update(game) {
     this.t++;
+    // a guard who was on his way here and got drawn off (a chase, Grey's pole) lets go of it
+    if (this.by && !['investigate', 'snuff'].includes(this.by.state)) { if (this.by.lamp === this) this.by.lamp = null; this.by = null; }
     if (!this.by || this.by.state !== 'snuff') this.dying = 0;
     const h = game.heroine;
     if (!this.lit && !h.hooded && h.onGround && h.state === 'normal' && Math.abs(h.x - this.x) < 10 && Math.abs(h.y - this.y) < 4) {
@@ -590,7 +592,18 @@ class Pedestal {
     this.dir = dx === 1 ? [0, -1] : dy === -1 ? [-1, 0] : [1, 0];
     Sfx.play('lever');
   }
-  draw(ctx, cx, cy) { drawTile(ctx, 'pedestal', Math.round(this.x - 8 - cx), Math.round(this.y - 8 - cy)); }
+  draw(ctx, cx, cy) {
+    const x = Math.round(this.x - cx), y = Math.round(this.y - cy);
+    drawTile(ctx, 'pedestal', x - 8, y - 8);
+    if (!this.turnable) return;
+    // a brass ring with a pointer: this one turns (and shows where it throws the light)
+    ctx.fillStyle = '#d0a050';
+    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; ctx.fillRect(Math.round(x + Math.cos(a) * 7), Math.round(y - 3 + Math.sin(a) * 3), 1, 1); }
+    const [dx, dy] = this.dir;
+    ctx.fillStyle = '#fff0c0';
+    for (let k = 3; k <= 8; k++) ctx.fillRect(x + dx * k, y - 3 + dy * k * 0.6, 1, 1);
+    ctx.fillRect(x + dx * 8 - (dy ? 1 : 0), y - 3 + dy * 5 - (dx ? 1 : 0), dy ? 3 : 1, dx ? 3 : 1);
+  }
 }
 
 class Mirror {
@@ -646,21 +659,28 @@ class Lift {
     });
   }
   update(game) {
-    // once it has made it to the top it stays there (no hole left in the floor above)
-    if (this.latched) return;
-    if (Math.abs(this.y - this.y1) < 0.5 && Math.abs(this.x - this.x1) < 0.5) { this.latched = true; Sfx.play('block'); return; }
-    let on = this.powered(game);
-    // a lift waiting at the bottom only sets off with Grey aboard (so nobody is left behind)
     const hero = game.hero, atHome = Math.abs(this.x - this.x0) < 0.5 && Math.abs(this.y - this.y0) < 0.5;
     const heroOn = hero.onGround && Math.abs(hero.y - this.y) < 1.5 && hero.x + hero.hw > this.x && hero.x - hero.hw < this.x + this.w;
+    // Grey back down where it starts from (he fell): a lift that has been up comes down for him
+    const heroBelow = hero.onGround && Math.abs(hero.y - this.y0) < 1.5 * TILE && hero.x > this.x0 - 3 * TILE && hero.x < this.x0 + this.w + 3 * TILE;
+    // once it has made it to the top it stays there (no hole left in the floor above)
+    if (this.latched) {
+      if (!heroBelow) return;
+      this.latched = false; this.free = true;
+    }
+    if (Math.abs(this.y - this.y1) < 0.5 && Math.abs(this.x - this.x1) < 0.5 && !(this.free && heroBelow)) { this.latched = true; Sfx.play('block'); return; }
+    // (after its first trip it runs like a plain lift: up with Grey on it, down when he calls from below)
+    let on = this.free ? heroOn || (!atHome && !heroBelow) : this.powered(game);
+    // a lift waiting at the bottom only sets off with Grey aboard (so nobody is left behind)
     // ... and waits a moment for her to step on too, if she is following
     const h = game.heroine;
     const herOn = h.onGround && Math.abs(h.y - this.y) < 1.5 && h.x + h.hw > this.x && h.x - h.hw < this.x + this.w;
     this.board = heroOn ? (this.board || 0) + 1 : 0;
     const waitHer = h.mode === 'follow' && !herOn && Math.abs(h.y - hero.y) < 3 * TILE && this.board < 600;
     if (on && atHome && (!heroOn || waitHer)) on = false;
-    // on the way up it needs Grey aboard: if he falls off, it sinks back down for him
-    if (on && !atHome && !heroOn) on = false;
+    // on the way up it needs Grey aboard: if he falls off, it sinks back down for him.
+    // Once under way with him on it, it goes on up even if the light gives out.
+    if (!atHome) on = heroOn;
     const tx = on ? this.x1 : this.x0, ty = on ? this.y1 : this.y0;
     const dx = clamp(tx - this.x, -this.speed, this.speed), dy = clamp(ty - this.y, -this.speed, this.speed);
     const mv = dx || dy ? 1 : 0;

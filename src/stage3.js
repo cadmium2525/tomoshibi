@@ -197,9 +197,12 @@ CHAPTERS[3] = {
       hero.x = 7.5 * TILE; h.x = 6.5 * TILE; hero.y = h.y = 30 * TILE; hero.facing = h.facing = 1;
       g.black = 1; g.updateCamera(true);
     }),
+    Cut.caption('――森を 抜けた その日の 夜'),
     Cut.fade(0, 60),
     Cut.walk('hero', 10, 0.6),
     Cut.walk('heroine', 8.5, 0.5),
+    Cut.talk('ルミナ', '……また 夜に なっちゃった。'),
+    Cut.talk('グレイ', '昼の街は 人目が 多すぎる。 森の外れで 日が沈むのを 待ったんだ。'),
     Cut.say('heroine', '……まっくら。 みんな、どうして 灯りを 消しているの？', 'her', 130),
     Cut.talk('グレイ', '怖いんだよ。 光があれば、影も できるからね。'),
     Cut.talk('グレイ', '……あの門には 消灯番がいる。 君の光は、ここでは 目立ちすぎる。'),
