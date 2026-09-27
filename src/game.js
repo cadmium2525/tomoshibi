@@ -1716,12 +1716,15 @@ class Game {
     ctx.fillStyle = col;
     for (let j = 0; j < g.length; j++) for (let i = 0; i < g[0].length; i++) if (g[j][i] === '#') ctx.fillRect(ox + i * 2, oy + j * 2, 2, 2);
     if (CHAPTERS[this.chapter].hood) {
-      // coat icon (on / off) and the fear gauge
+      // coat icon (on / off) and the fear gauge, on a row of their own under the heart
+      // (the follow / wait label sits to the right of the heart)
+      const gy = oy + 18;
+      ctx.fillStyle = '#1a1030'; ctx.fillRect(ox - 1, gy - 1, 9, 11);
       ctx.fillStyle = h.hooded ? '#5a5468' : '#ffe9a8';
-      ctx.fillRect(ox + 20, oy + 1, 7, 9); ctx.fillStyle = '#1a1030'; ctx.fillRect(ox + 20, oy + 1, 7, 1);
-      ctx.fillStyle = '#1a1030'; ctx.fillRect(ox + 30, oy + 3, 34, 6);
+      ctx.fillRect(ox, gy, 7, 9); ctx.fillStyle = '#1a1030'; ctx.fillRect(ox, gy, 7, 1);
+      ctx.fillStyle = '#1a1030'; ctx.fillRect(ox + 10, gy + 2, 34, 6);
       ctx.fillStyle = this.fear > 0.8 && (this.t >> 3) % 2 ? '#ff6080' : '#8a60d0';
-      ctx.fillRect(ox + 31, oy + 4, Math.round(32 * this.fear), 4);
+      ctx.fillRect(ox + 11, gy + 3, Math.round(32 * this.fear), 4);
     }
     // off-screen arrow toward her
     const x = h.x - cx, y = h.y - 16 - cy;
