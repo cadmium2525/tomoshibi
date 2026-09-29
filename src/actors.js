@@ -117,6 +117,13 @@ class Hero extends Body {
         break;
       case 'hurt':
         this.vx = approach(this.vx, 0, this.downed && this.onGround ? 0.2 : 0.06);
+        // the trial: now and then a blow leaves him dizzy (mashing the buttons shakes it off sooner)
+        if (this.stunT > 0 && this.t >= 26 && this.onGround) {
+          if (this.t === 26) game.say(this, '……うっ、目が まわる……', 'hero', 70);
+          if (['jump', 'attack', 'left', 'right'].some((k) => I.pressed(k))) this.stunT -= 7;
+          if (--this.stunT <= 0) { this.stunT = 0; this.state = 'normal'; }
+          break;
+        }
         if (this.t >= (this.downed ? 120 : 26) && this.onGround) { this.state = 'normal'; this.downed = false; }
         if (this.downed && this.t > 30 && this.t % 16 === 0) game.particles.add({ x: this.x + rand(-6, 6), y: this.y - 34, vy: -0.3, life: 30, col: '#ffe08a', size: 1 });
         break;
@@ -150,6 +157,8 @@ class Hero extends Body {
     if (this.held) game.dropHeld(this);
     this.pain = (this.pain || 0) + 1;
     this.state = 'hurt'; this.t = 0; this.flash = 30;
+    this.stunT = 0;
+    if (HARD && this.pain < 3 && Math.random() < 0.35) this.stunT = 110;
     if (this.pain >= 3) {
       // the third blow in a short while: thrown down hard, and slow to get up again
       this.pain = 0; this.downed = true;
@@ -168,7 +177,7 @@ class Hero extends Body {
   frame() {
     const s = this.state, t = this.t;
     if (s === 'scripted' && this.pose) return this.pose;
-    if (s === 'hurt') return 'jump13';
+    if (s === 'hurt') return this.stunT > 0 && t >= 26 && this.onGround ? 'jump15' : 'jump13';
     if (s === 'fallout') return 'jump11';
     if (s === 'reach' || s === 'catchwait') return 'jump1';
     if (s === 'catch') return t < 20 ? 'jump2' : 'jump17';
@@ -218,6 +227,13 @@ class Hero extends Body {
       ctx.restore();
     } else drawSprite(ctx, 'hero', this.frame(), x, y, this.facing < 0, white ? { white: true } : null);
     if (this.state === 'attack') this.drawCane(ctx, cx, cy);
+    if (this.state === 'hurt' && this.stunT > 0 && this.t >= 26) {       // dizzy: little stars going round his head
+      for (let i = 0; i < 3; i++) {
+        const a = this.t * 0.12 + i * 2.094, sx = Math.round(x + Math.cos(a) * 9), sy = Math.round(y - 42 + Math.sin(a) * 3);
+        ctx.fillStyle = Math.sin(a) > 0 ? '#ffe08a' : '#b09040';
+        ctx.fillRect(sx - 1, sy, 3, 1); ctx.fillRect(sx, sy - 1, 1, 3);
+      }
+    }
     if (this.held) { const p = this.heldPos(); drawTile(ctx, 'block', Math.round(p.x - 8 - cx), Math.round(p.y - 16 - cy)); }
   }
 

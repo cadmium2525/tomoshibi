@@ -22,6 +22,42 @@ const COMMON_TEXT = {
   hint_escape: N('ヒント') + '崩落に 追いつかれる前に 出口へ！ {dash}で走り、{jump}で跳べ。ルミナは 手をつないで ついてくる。',
 };
 
+// Stages changed in the stage editor (editor.html). src/stage_edits.js (written by the
+// editor through tools/devserver.py) fills STAGE_EDITS[n]; a chapter with an entry is
+// played from it instead of its build(). Tile layers are run-length coded: [value, count, ...].
+const STAGE_EDITS = {};
+let TEST_STAGE = null;
+function unpackLayer(rle, n) {
+  const a = new Uint8Array(n);
+  for (let i = 0, p = 0; i < rle.length; i += 2) { a.fill(rle[i], p, p + rle[i + 1]); p += rle[i + 1]; }
+  return a;
+}
+function packLayer(a) {
+  const r = [];
+  for (let i = 0; i < a.length;) { let j = i; while (j < a.length && a[j] === a[i]) j++; r.push(a[i], j - i); i = j; }
+  return r;
+}
+function unpackStage(d) {
+  const n = d.W * d.H, copy = (v) => JSON.parse(JSON.stringify(v || []));
+  return { W: d.W, H: d.H, solid: unpackLayer(d.solid, n), noBg: unpackLayer(d.noBg, n), soft: d.soft ? unpackLayer(d.soft, n) : undefined,
+    ents: copy(d.ents), decor: copy(d.decor), darks: copy(d.darks), name: d.name };
+}
+function packStage(s) {
+  return { W: s.W, H: s.H, solid: packLayer(s.solid), noBg: packLayer(s.noBg), soft: s.soft ? packLayer(s.soft) : undefined,
+    ents: s.ents, decor: s.decor, darks: s.darks || [], name: s.name };
+}
+// an edited stage may also bring its own texts for the fragments and pages it holds
+function applyStageTexts(n, d) {
+  if (!CHAPTERS[n] || !d) return;
+  if (d.shards) CHAPTERS[n].shards = d.shards;
+  if (d.pages) CHAPTERS[n].pages = d.pages;
+}
+function setTestStage(n, d) { TEST_STAGE = { n, d }; applyStageTexts(n, d); }
+function stageFor(n) {
+  const d = TEST_STAGE && TEST_STAGE.n === n ? TEST_STAGE.d : STAGE_EDITS[n];
+  return d ? unpackStage(d) : CHAPTERS[n].build();
+}
+
 // the tables of the chapter being played
 let TEXT = {}, SHARDS = {}, PAGES = {};
 function useChapter(n) {

@@ -9,7 +9,13 @@ ICONS['↑'] = ['..#..', '.###.', '#####', '..#..', '..#..', '..#..'];
 // Save data (one slot, automatic). Written when a lantern is lit, when a
 // chapter begins and when it is cleared; "つづきから" resumes from it.
 // ---------------------------------------------------------------------------
-const DEBUG_KEY = location.search.includes('debug') ? '.debug' : '';
+// a test play started from the stage editor (editor.html): its stage, where to start, which mode
+const TEST = (() => {
+  if (!/[?&]test\b/.test(location.search)) return null;
+  try { return JSON.parse(localStorage.getItem('lumina.editor.test')); } catch (e) { return null; }
+})();
+if (TEST) { setTestStage(TEST.chapter, TEST.stage); HARD = !!TEST.hard; }
+const DEBUG_KEY = TEST ? '.test' : location.search.includes('debug') ? '.debug' : '';
 const Save = {
   get KEY() { return 'lumina.save.v1' + (HARD ? '.hard' : '') + DEBUG_KEY; },     // the trial has a slot of its own
   read() {
@@ -78,7 +84,7 @@ class Game {
     this.state = 'title'; this.st = 0; this.titleSel = 0;
     this.load(null);
     Touch.init(() => this.onInputModeChange());
-    this.showTitle();
+    if (TEST) this.startTest(); else this.showTitle();
     addEventListener('resize', () => this.resize());
     addEventListener('orientationchange', () => setTimeout(() => this.resize(), 200));
     this.resize();
@@ -107,7 +113,7 @@ class Game {
   // ---- setup ---------------------------------------------------------------
   load(cp) {
     const C = CHAPTERS[this.chapter];
-    const stage = C.build();
+    const stage = stageFor(this.chapter);
     this.world = new World(stage, C.theme);
     this.t = 0; this.shake = 0; this.hitstop = 0; this.dangerT = 0; this.spawnCd = 300;
     this.flags = {}; this.msgT = 0; this.msgHtml = ''; this.toastT = 0; this.fade = 0;
@@ -289,7 +295,7 @@ class Game {
   pause() {
     this.state = 'pause';
     this.showCenter(`<h1>PAUSE</h1><div class="keys">${this.foundHtml()}</div>${this.keysHtml()}<div class="menu"><button data-cmd="resume">再開</button>
-      <button data-cmd="retry">最後の灯籠から やり直す</button><button data-cmd="mute">音 ${Sfx.muted ? 'OFF → ON' : 'ON → OFF'}</button></div>
+      <button data-cmd="retry">${HARD ? '章のはじめから' : '最後の灯籠から'} やり直す</button>${TEST ? '<button data-cmd="testrestart">テスト開始位置から</button>' : ''}<button data-cmd="mute">音 ${Sfx.muted ? 'OFF → ON' : 'ON → OFF'}</button></div>
       ${Touch.enabled ? '' : '<div style="margin-top:1em;font-size:0.7em">Enter：再開　R：やり直す　M：音</div>'}`, true);
   }
 
@@ -302,6 +308,7 @@ class Game {
     if (cmd.startsWith('a:')) { this.albumCommand(cmd.slice(2)); return; }
     if (cmd === 'resume') { this.state = 'play'; this.hideCenter(); }
     else if (cmd === 'retry') this.retry();
+    else if (cmd === 'testrestart') this.startTest();
     else if (cmd === 'mute') { Sfx.toggleMute(); this.pause(); }
   }
 
@@ -366,7 +373,7 @@ class Game {
             ? ['ルミナは 奈落へ 落ちてしまった…', 'あなたは 彼女を 守れなかった']
             : this.goReason === 'guard' ? ['ルミナは 消灯番に 連れて行かれた…', 'あなたは 彼女の光を 隠しきれなかった']
             : ['ルミナは 闇に連れ去られた…', 'あなたは 彼女の手を 離してしまった'];
-          this.showCenter(`<h1 style="color:#d8c8ff">${t1}</h1><h2>${t2}</h2><div class="blink">${Touch.enabled ? 'タップで' : 'Z：'}最後の灯籠から やり直す</div>`, true);
+          this.showCenter(`<h1 style="color:#d8c8ff">${t1}</h1><h2>${t2}</h2><div class="blink">${Touch.enabled ? 'タップで' : 'Z：'}${HARD ? '章のはじめから' : '最後の灯籠から'} やり直す</div>`, true);
         }
         if (this.stGo > 70 && (Input.pressed('jump') || Input.pressed('start') || Input.pressed('retry'))) this.retry();
         this.particles.update();
@@ -376,6 +383,7 @@ class Game {
         return;
       case 'clear':
         if (this.st > 60 && (Input.pressed('jump') || Input.pressed('start'))) {
+          if (TEST) { this.startTest(); return; }
           if (CHAPTERS[this.chapter + 1]) { this.startChapter(this.chapter + 1); return; }
           this.checkpoint = null; this.stats = { time: 0, grabs: 0, kills: 0, retries: 0 };
           this.load(null); this.state = 'title'; this.showTitle(); this.ui.hud.style.display = 'none';
@@ -457,6 +465,31 @@ class Game {
     this.startOpening();
   }
 
+  // ---- test play from the stage editor: straight into the chapter, at the chosen spot ----
+  startTest() {
+    Sfx.unlock(); Sfx.startBgm();
+    this.hideCenter(); this.hideTalk();
+    this.chapter = TEST.chapter; const C = useChapter(TEST.chapter);
+    this.checkpoint = null; this.stats = { time: 0, grabs: 0, kills: 0, retries: 0 };
+    this.collected = new Set();
+    this.load(null);
+    if (C.startHooded) this.heroine.hooded = true;
+    if (TEST.start) this.placeTestStart();
+    if (TEST.fire) this.fire = true;
+    this.state = 'play';
+    this.ui.hud.style.display = 'flex'; this.ui.skip.style.display = 'none';
+    this.showChapter(`テストプレイ${HARD ? '（試練）' : ''}`, `第${C.num}章 ${C.title}`);
+  }
+  placeTestStart() {
+    const hero = this.hero, h = this.heroine, p = TEST.start;
+    hero.x = p.x; hero.y = p.y; h.x = p.x - 14; h.y = p.y;
+    hero.vx = hero.vy = h.vx = h.vy = 0; hero.facing = h.facing = 1;
+    hero.checkGround(this.world); h.checkGround(this.world);
+    hero.lastSafe = { x: hero.x, y: hero.y };
+    this.startPos = { hx: hero.x, hy: hero.y, yx: h.x, yy: h.y };
+    this.updateCamera(true);
+  }
+
   // ---- the opening (before the prologue) ------------------------------------------
   startOpening() {
     this.state = 'opening'; this.op = { i: 0, t: 0, shown: -1 };
@@ -510,7 +543,7 @@ class Game {
     const hero = this.hero, h = this.heroine;
     // watched to the end: play starts right where the scene left them (no jump);
     // skipped: they are put at the start
-    const p = skipped || !CHAPTERS[this.chapter].intro ? this.startPos : { hx: hero.x, hy: hero.y, yx: h.x, yy: h.y };
+    const p = skipped || !CHAPTERS[this.chapter].intro || STAGE_EDITS[this.chapter] ? this.startPos : { hx: hero.x, hy: hero.y, yx: h.x, yy: h.y };
     hero.setState('normal'); hero.pose = null; hero.kinematic = false; hero.front = false;
     h.setState('normal'); h.pose = null; h.mode = 'follow';
     if (CHAPTERS[this.chapter].startHooded) h.hooded = true;
@@ -584,6 +617,7 @@ class Game {
     const hero = this.hero, h = this.heroine;
     hero.setState('normal'); hero.pose = null; hero.kinematic = false; hero.x = 9.7 * TILE; hero.y = 16 * TILE; hero.facing = 1;
     h.setState('normal'); h.pose = null; h.x = 8.1 * TILE; h.y = 16 * TILE; h.facing = 1; h.mode = 'follow';
+    if (STAGE_EDITS[1]) { const p = this.startPos; hero.x = p.hx; hero.y = p.hy; h.x = p.yx; h.y = p.yy; }     // (changed in the editor)
     hero.vx = hero.vy = h.vx = h.vy = 0;
     hero.checkGround(this.world); h.checkGround(this.world);
     hero.lastSafe = { x: hero.x, y: hero.y };
@@ -1246,7 +1280,8 @@ class Game {
     return false;
   }
   showFinal() {
-    const s = this.stats, sec = Math.floor(s.time / 60), all = this.shardsFound() >= 30;
+    const total = Object.values(CHAPTERS).reduce((n, C) => n + Object.keys(C.shards || {}).length, 0);
+    const s = this.stats, sec = Math.floor(s.time / 60), all = this.shardsFound() >= total;
     this.state = 'clear'; this.st = 0;
     Album.write(HARD ? { hardClear: true, allClear: true } : { allClear: true });
     const prev = Save.read(), cleared = [...new Set([...(prev ? prev.cleared : []), this.chapter])];
@@ -1257,7 +1292,7 @@ class Game {
       ${all ? '<div class="quote">影ぼうしたちから：「ずっと みてたよ。 ……いってらっしゃい、ルミナ。 ぼくたちも、いっしょ」</div>' : ''}
       ${HARD ? '<div class="quote">── 灯守りの試練、踏破 ──</div>' : ''}
       <div class="keys"><b>第6章のクリアタイム</b>${Math.floor(sec / 60)}分${String(sec % 60).padStart(2, '0')}秒<br>
-      <b>影絵の欠片（ぜんぶ）</b>${this.shardsFound()} / 30<br>${this.foundHtml()}</div>
+      <b>影絵の欠片（ぜんぶ）</b>${this.shardsFound()} / ${total}<br>${this.foundHtml()}</div>
       <div class="blink">${Touch.enabled ? 'タップで' : 'Z：'}タイトルへ</div>`, true, true);
   }
 
@@ -1565,17 +1600,34 @@ class Game {
 
   // Grey fell into the dark: Lumina is left alone, so it counts as a failure
   fellOut() {
+    if (HARD) { this.restartChapter(); return; }
     this.stats.retries++;
     this.load(this.progressSnapshot());
+    if (TEST && TEST.start && !this.checkpoint) this.placeTestStart();
     if (this.state === 'cutscene') return;           // the escape starts over with its cutscene
     this.state = 'play';
     this.black = 1;
     this.say(this.heroine, 'グレイさん…！', 'her', 60);
   }
 
+  // the trial: every failure starts the chapter over (no lanterns to go back to)
+  restartChapter() {
+    this.stats.retries++;
+    this.checkpoint = null;
+    this.load(null);
+    if (TEST && TEST.start) this.placeTestStart();
+    this.state = 'play'; this.hideCenter(); this.hideTalk();
+    this.ui.hud.style.display = 'flex';
+    this.black = 1;
+    Sfx.startBgm();
+    this.showChapter(`第${this.chapter}章`, CHAPTERS[this.chapter].title);
+  }
+
   retry() {
+    if (HARD) { this.restartChapter(); return; }
     this.stats.retries++;
     this.load(this.progressSnapshot());
+    if (TEST && TEST.start && !this.checkpoint) this.placeTestStart();
     if (this.state === 'cutscene') { this.hideCenter(); Sfx.startBgm(); return; }
     this.state = 'play'; this.hideCenter();
     Sfx.startBgm();
@@ -2054,7 +2106,7 @@ class Game {
 // ---------------------------------------------------------------------------
 Input.init();
 // offline support (skipped while debugging so edits show up immediately)
-if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !/debug|nosw/.test(location.search)) {
+if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !/debug|nosw|test/.test(location.search)) {
   addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
 loadSheets().then(() => {

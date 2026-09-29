@@ -126,7 +126,7 @@ class Block extends Body {
 class Shrine {
   constructor(e) { this.id = e.id; this.x = e.x; this.y = e.y; this.lit = false; }
   update(game) {
-    if (this.lit) return;
+    if (this.lit || HARD) return;                     // the trial: the lanterns stay cold
     const hero = game.hero, h = game.heroine;
     // her light kindles the lantern when she walks past it (with the hero close by)
     if (!h.hooded && Math.abs(h.x - this.x) < 20 && Math.abs(h.y - this.y) < 12 && h.state === 'normal' && Math.abs(hero.x - this.x) < 110 && Math.abs(hero.y - this.y) < 60) {
