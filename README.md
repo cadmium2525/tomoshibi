@@ -120,6 +120,17 @@ cd tools && python build_assets.py
 - 「▶ テストプレイ」でその場で遊べる（旗の位置から／試練でも）。「💾 保存」で `src/stage_edits.js` に書き込み、本編のその章が置き換わる（`STAGE_EDITS`）。「その他 → オリジナルに戻す」→ 保存で元に戻る
 - 編集途中はブラウザに下書きが残る。使い方は エディタの「？」
 
+## PV（紹介動画）の作り方
+
+作業フォルダ `pv/` はコミットしない（素材・動画が大きいため）。道具は `tools/pv/`。
+
+1. `python tools/pv/pvserver.py 8934` → `http://localhost:8934/index.html?debug` を開き、`tools/debug_helper.js`・`tools/pv/recorder.js`・各 `autoplay*.js` を読み込む
+2. `REC.hook()` のあと `REC.watch('名前', () => 条件, 最大コマ数)` を並べて自動プレイを走らせると、条件の間だけ 30fps で `pv/footage/名前_N/` に録れる。`await REC.done()` で送り切る
+3. `tools/pv/captions.js` の `PVCAP.make()` で字幕（ゲームのドット書体）を `pv/stills/` に作る
+4. `python tools/pv/sheet.py 名前 30` で録った場面の一覧、`python tools/pv/frames.py 出力名 clip:コマ ...` で原寸の確認
+5. `python tools/pv/music.py`（曲）→ `python tools/pv/compose.py both`（16:9 と 9:16 の mp4）。構成は compose.py の `SHOTS` と `CAPS`。`--preview` で一覧だけ
+   （ffmpeg は `pip install imageio-ffmpeg` のものを使う）
+
 ## 次にやること
 
 - 第2章「薄明の森」の手直し（遊んでもらった感想から）。設計は `docs/CHAPTER2.md`
