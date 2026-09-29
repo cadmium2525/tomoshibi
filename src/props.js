@@ -218,7 +218,7 @@ class Door {
 }
 
 class Ambush {
-  constructor(e) { this.id = e.id; this.x0 = e.x0 * TILE; this.x1 = (e.x1 + 1) * TILE; this.y = e.y; this.waves = e.waves; this.wave = -1; this.done = false; this.delay = 0; }
+  constructor(e) { this.id = e.id; this.x0 = e.x0 * TILE; this.x1 = (e.x1 + 1) * TILE; this.y = e.y; this.waves = HARD ? [...e.waves, e.waves[e.waves.length - 1]] : e.waves; this.wave = -1; this.done = false; this.delay = 0; }
   update(game) {
     if (this.done) return;
     const hero = game.hero;

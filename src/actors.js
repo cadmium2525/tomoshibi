@@ -609,7 +609,7 @@ class Shadow extends Body {
   constructor(portal) {
     super(portal.x, portal.y, 7, 40);
     this.portal = portal; portal.users++;
-    this.state = 'emerge'; this.t = 0; this.hp = 3; this.flash = 0; this.alive = true;
+    this.state = 'emerge'; this.t = 0; this.hp = HARD ? 4 : 3; this.flash = 0; this.alive = true;
     this.swipeCd = 90; this.animT = 0; this.sinkOffset = 0; this.wave = null; this.dodgeCd = 0;
   }
   setState(s) { this.state = s; this.t = 0; }
@@ -801,7 +801,7 @@ class Shadow extends Body {
 class FlyShadow extends Shadow {
   constructor(x, y) {
     super({ x, y, users: 0 });
-    this.state = 'fly'; this.hp = 2; this.swipeCd = 9999;
+    this.state = 'fly'; this.hp = HARD ? 3 : 2; this.swipeCd = 9999;
   }
   groundBelow(w) {
     for (let k = 0; k < 240; k += 2) if (w.pointSolid(this.x, this.y + k)) return Math.floor((this.y + k) / TILE) * TILE;
@@ -1040,7 +1040,7 @@ class Moth {
     this.B = B; this.cx = B.x; this.cy = B.y - 6.5 * TILE; this.A = 10 * TILE;
     this.x = B.x; this.y = B.y - 19 * TILE;               // up in the dome
     this.state = 'enter'; this.t = 0; this.animT = 0; this.dir = 1; this.hover = 0;
-    this.hp = 9; this.hits = 0; this.phase = 1; this.beamT = 0; this.lit = false;
+    this.hp = HARD ? 12 : 9; this.hits = 0; this.phase = 1; this.beamT = 0; this.lit = false;
     this.diveCd = 300; this.flash = 0; this.facing = 1; this.alive = true; this.falls = 0;
   }
   setState(s) { this.state = s; this.t = 0; }
@@ -1310,7 +1310,7 @@ class Whale {
   constructor(B) {
     this.B = B; this.sea = B.sea;                     // y of the sea's surface
     this.x = B.x0 + 4 * TILE; this.y = this.sea + 10; this.dir = 1;
-    this.state = 'rise'; this.t = 0; this.animT = 0; this.hp = 12; this.hits = 0; this.phase = 1;
+    this.state = 'rise'; this.t = 0; this.animT = 0; this.hp = this.maxHp = HARD ? 15 : 12; this.hits = 0; this.phase = 1;
     this.flash = 0; this.alive = true; this.alpha = 1; this.scale = 1; this.singT = 0; this.offSea = 0; this.again = false;
     this.spitT = 0; this.slapT = 0; this.drops = [];
   }
@@ -1496,7 +1496,7 @@ class Whale {
     game.particles.burst(this.x, this.y - 12, 12, { col: '#e8d8ff', life: 16, max: 2 });
     if (this.hp <= 0) { this.setState('die'); Sfx.play('kill'); game.shake = 8; return true; }
     // four strandings in all (three blows each); it grows fiercer as it weakens
-    const phase = this.hp > 8 ? 1 : this.hp > 4 ? 2 : 3;
+    const phase = this.hp > this.maxHp * 2 / 3 ? 1 : this.hp > this.maxHp / 3 ? 2 : 3;
     if (phase !== this.phase) {
       this.phase = phase; game.shake = 6;
       if (phase === 3) game.ring = 50;
@@ -1604,7 +1604,7 @@ class Ookage {
 //    flame) it thins and its heart shows. Four blows.
 class FinalShadow {
   constructor(B) {
-    this.B = B; this.form = 1; this.hp = 4; this.t = 0; this.state = 'wall'; this.st = 0;
+    this.B = B; this.form = 1; this.hp = HARD ? 6 : 4; this.t = 0; this.state = 'wall'; this.st = 0;
     this.x = B.x; this.S = 2; this.flash = 0; this.arm = null; this.darkT = 0;
     this.pools = []; this.thin = 0; this.touchCd = 0; this.alive = true; this.alpha = 1; this.armCd = 200;
   }
@@ -1718,7 +1718,7 @@ class FinalShadow {
     if (this.form === 2) { this.thin = 0; this.x = clamp(this.x + dir * 40, this.B.x0 + 16, this.B.x1 - 16); }
     if (this.hp <= 0) {
       if (this.form === 1) {
-        this.form = 2; this.hp = 4; this.setState('peel'); this.arm = null; game.shake = 8; Sfx.play('emerge');
+        this.form = 2; this.hp = HARD ? 6 : 4; this.setState('peel'); this.arm = null; game.shake = 8; Sfx.play('emerge');
         game.say(h, '……かべから、でてくる……！', 'cry', 110);
       } else this.alive = false;
     }

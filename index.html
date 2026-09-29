@@ -90,6 +90,27 @@
   #center.light .keys { color: #3a2a14; }
   #center.light .keys b { color: #9a5a10; }
   @keyframes blink { 50% { opacity: 0; } }
+  /* 思い出の頁 (title): what has been found, chapter by chapter */
+  #center.albumv { background: rgba(4, 3, 10, 0.8); }
+  #center .album { width: min(92vw, 44em); max-height: 94vh; overflow-y: auto; font-size: 0.8em; text-shadow: 0.08em 0.08em 0 #000; }
+  #center .album .ahead { display: flex; align-items: center; justify-content: center; gap: 1em; font-size: 1.15em; color: #ffe9a8; }
+  #center .album .ahead button { padding: 0.2em 0.8em; }
+  #center .album .acols { display: flex; gap: 1.2em; margin-top: 0.6em; text-align: left; }
+  #center .album .acol { flex: 1; min-width: 0; }
+  #center .album .acol:first-child { flex: 1.5; }
+  #center .album h3 { font-size: 0.95em; font-weight: normal; color: #b8c4ff; margin: 0 0 0.3em; border-bottom: 0.08em solid rgba(184, 196, 255, 0.4); }
+  #center .album h3 small { font-size: 0.85em; color: #ffe08a; margin-left: 0.5em; }
+  #center .album ul { list-style: none; margin: 0; padding: 0; }
+  #center .album li { font-size: 0.85em; line-height: 1.5; margin: 0.35em 0; padding-left: 1em; text-indent: -1em; color: #ece6ff; }
+  #center .album li::before { content: '◆ '; color: #c8a8ff; }
+  #center .album li.none, #center .album .none { color: #6a6880; }
+  #center .album li.none::before { color: #6a6880; }
+  #center .album .apages { display: flex; flex-direction: column; gap: 0.4em; }
+  #center .album .apages button { text-align: left; font-size: 0.8em; padding: 0.35em 0.7em; opacity: 0.8; }
+  #center .album .apages button.sel { opacity: 1; border-color: #ffe08a; box-shadow: 0 0 0.6em rgba(255, 220, 140, 0.5); }
+  #center .album .apages button.none { cursor: default; background: #1a1a2a; border-color: #44445a; }
+  #center .album .afoot { display: flex; justify-content: space-between; align-items: center; margin-top: 0.8em; font-size: 0.85em; color: #d8d8ee; }
+  #center .album .ahint { margin-top: 0.4em; font-size: 0.7em; color: #9a98b8; }
   #center .quote { margin: 0.2em 0 0.4em; line-height: 1.8; color: #6a4a20; }
   /* Marta's letter */
   .letter { background: #efe3c4; color: #3a2a18; border: 0.2em solid #8a6a3a; border-radius: 0.3em; text-shadow: none;

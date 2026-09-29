@@ -5,6 +5,8 @@
 const TILE = 16;
 const VW = 384, VH = 216;
 const GRAV = 0.26;
+// 灯守りの試練 (hard mode): tougher shadows, longer stands, saved only when a chapter is cleared
+let HARD = false;
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;

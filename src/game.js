@@ -9,8 +9,9 @@ ICONS['↑'] = ['..#..', '.###.', '#####', '..#..', '..#..', '..#..'];
 // Save data (one slot, automatic). Written when a lantern is lit, when a
 // chapter begins and when it is cleared; "つづきから" resumes from it.
 // ---------------------------------------------------------------------------
+const DEBUG_KEY = location.search.includes('debug') ? '.debug' : '';
 const Save = {
-  KEY: 'lumina.save.v1' + (location.search.includes('debug') ? '.debug' : ''),
+  get KEY() { return 'lumina.save.v1' + (HARD ? '.hard' : '') + DEBUG_KEY; },     // the trial has a slot of its own
   read() {
     try { const d = JSON.parse(localStorage.getItem(this.KEY)); return d && d.chapter ? d : null; } catch (e) { return null; }
   },
@@ -20,6 +21,39 @@ const Save = {
     return d;
   },
   clear() { try { localStorage.removeItem(this.KEY); } catch (e) { /* ignore */ } },
+};
+
+// Everything ever found (in either mode, over any number of new games), for the
+// title's 思い出の頁; and whether the story has been seen to its end.
+const Album = {
+  KEY: 'lumina.album.v1' + DEBUG_KEY,
+  read() {
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(this.KEY)); } catch (e) { /* ignore */ }
+    return Object.assign({ found: [], allClear: false, hardClear: false }, d || {});
+  },
+  write(patch) {
+    const d = Object.assign(this.read(), patch);
+    try { localStorage.setItem(this.KEY, JSON.stringify(d)); } catch (e) { /* ignore */ }
+    return d;
+  },
+  add(ids) {
+    const d = this.read(), s = new Set(d.found), n = s.size;
+    for (const id of ids) s.add(id);
+    if (s.size !== n) this.write({ found: [...s] });
+  },
+  // saves from before the album existed
+  sync() {
+    const hard = HARD;
+    for (const h of [false, true]) {
+      HARD = h;
+      const sv = Save.read();
+      if (!sv) continue;
+      this.add(sv.collected || []);
+      if (!h && sv.cleared.includes(6) && !this.read().allClear) this.write({ allClear: true });
+    }
+    HARD = hard;
+  },
 };
 
 class Game {
@@ -53,6 +87,7 @@ class Game {
       Sfx.unlock();
       const btn = e.target.closest('button');
       if (btn && btn.dataset.cmd) { e.preventDefault(); this.menuCommand(btn.dataset.cmd); return; }
+      if (this.state === 'album') { if (this.alb.open) this.albumCommand('close'); return; }
       if (this.state === 'cutscene' || this.state === 'opening') Input.tap('jump');     // advance the letter / the opening
       else if (this.state !== 'pause') Input.tap('start');     // also closes a page being read
     });
@@ -203,7 +238,8 @@ class Game {
       ambush: this.ambushes.filter((a) => a.done).map((a) => a.id),
       blocks: Object.fromEntries(this.blocks.map((b) => [b.id, { x: b.x, y: b.y }])),
     };
-    Save.write({ chapter: this.chapter, cp: this.checkpoint, fresh: false, stats: this.stats, collected: [...this.collected] });
+    // the trial: a lantern is a place to start over from, but it is not kept once the game is closed
+    if (!HARD) Save.write({ chapter: this.chapter, cp: this.checkpoint, fresh: false, stats: this.stats, collected: [...this.collected] });
   }
 
   // where to go back to after a fall / being taken: the last lantern, but the
@@ -261,6 +297,9 @@ class Game {
     Sfx.play('select');
     if (cmd === 'continue') { this.continueGame(); return; }
     if (cmd === 'newgame') { this.startNew(); return; }
+    if (cmd === 'hard' || cmd === 'normal') { HARD = cmd === 'hard'; this.titleSel = 0; this.showTitle(); return; }
+    if (cmd === 'album') { this.openAlbum(); return; }
+    if (cmd.startsWith('a:')) { this.albumCommand(cmd.slice(2)); return; }
     if (cmd === 'resume') { this.state = 'play'; this.hideCenter(); }
     else if (cmd === 'retry') this.retry();
     else if (cmd === 'mute') { Sfx.toggleMute(); this.pause(); }
@@ -293,12 +332,16 @@ class Game {
     switch (this.state) {
       case 'title':
         this.t++;
-        if (this.titleSave && (Input.pressed('up') || Input.pressed('down'))) {
-          this.titleSel ^= 1; Sfx.play('select'); this.showTitle();
+        if (this.titleItems.length > 1 && (Input.pressed('up') || Input.pressed('down'))) {
+          const n = this.titleItems.length;
+          this.titleSel = (this.titleSel + (Input.pressed('up') ? n - 1 : 1)) % n; Sfx.play('select'); this.showTitle();
         }
         if (Input.pressed('jump') || Input.pressed('start') || Input.pressed('attack')) {
-          this.menuCommand(this.titleSave && this.titleSel === 0 ? 'continue' : 'newgame');
+          this.menuCommand(this.titleItems[this.titleSel][0]);
         }
+        return;
+      case 'album':
+        this.updateAlbum();
         return;
       case 'opening':
         this.updateOpening();
@@ -671,6 +714,7 @@ class Game {
 
   showChapter(num, title) {
     const c = this.ui.chapter;
+    if (HARD) num += '　─ 試練 ─';
     c.innerHTML = `<div class="num">${num}</div><div class="title">${title}</div>`;
     c.className = '';
     void c.offsetWidth;          // restart the CSS animation
@@ -702,7 +746,7 @@ class Game {
   // ---- collectibles ----------------------------------------------------------------
   collect(it) {
     this.items = this.items.filter((x) => x !== it);
-    this.collected.add(it.id);
+    this.collected.add(it.id); Album.add([it.id]);
     Sfx.play('save');
     this.particles.burst(it.x, it.y, 12, { col: it.kind === 'shard' ? '#c8a8ff' : '#ffe6a0', life: 26, max: 1.2 });
     if (it.kind === 'shard') {
@@ -1204,12 +1248,14 @@ class Game {
   showFinal() {
     const s = this.stats, sec = Math.floor(s.time / 60), all = this.shardsFound() >= 30;
     this.state = 'clear'; this.st = 0;
+    Album.write(HARD ? { hardClear: true, allClear: true } : { allClear: true });
     const prev = Save.read(), cleared = [...new Set([...(prev ? prev.cleared : []), this.chapter])];
     Save.write({ chapter: this.chapter, cp: null, fresh: false, cleared, stats: this.stats, collected: [...this.collected] });
     this.ui.hud.style.display = 'none'; this.ui.msg.style.display = 'none';
     this.showCenter(`<h1>おわり</h1><h2>灯のルミナ</h2>
       <div class="quote">「影を 消すのは 闇じゃない。 もうひとつの 光だ」</div>
       ${all ? '<div class="quote">影ぼうしたちから：「ずっと みてたよ。 ……いってらっしゃい、ルミナ。 ぼくたちも、いっしょ」</div>' : ''}
+      ${HARD ? '<div class="quote">── 灯守りの試練、踏破 ──</div>' : ''}
       <div class="keys"><b>第6章のクリアタイム</b>${Math.floor(sec / 60)}分${String(sec % 60).padStart(2, '0')}秒<br>
       <b>影絵の欠片（ぜんぶ）</b>${this.shardsFound()} / 30<br>${this.foundHtml()}</div>
       <div class="blink">${Touch.enabled ? 'タップで' : 'Z：'}タイトルへ</div>`, true, true);
@@ -1358,7 +1404,7 @@ class Game {
     const hero = this.hero, h = this.heroine;
     if (!this.dawn) {
       if (hero.x >= z.x0 && Math.abs(hero.y - z.y) < 48) {
-        this.dawn = { t: 0, dur: 1800, spawnT: 90, n: 0 };
+        this.dawn = { t: 0, dur: HARD ? 2700 : 1800, spawnT: 90, n: 0 };
         this.notify('dawn_start', 220);
         h.emote('!', 60);
       } else if (this.mist && Math.abs(hero.x - this.mist.x) < 30 && !this.flags.mistMsg) {
@@ -1598,6 +1644,74 @@ class Game {
     }
   }
 
+  // ---- 思い出の頁: the shards and pages found so far, chapter by chapter ------------------
+  openAlbum() {
+    const found = new Set(Album.read().found);
+    let ch = 1;
+    while (CHAPTERS[ch + 1] && !Object.keys({ ...CHAPTERS[ch].shards, ...CHAPTERS[ch].pages }).some((k) => found.has(k))) ch++;
+    if (!Object.keys({ ...CHAPTERS[ch].shards, ...CHAPTERS[ch].pages }).some((k) => found.has(k))) ch = 1;
+    this.alb = { ch, sel: 0, open: null, found };
+    this.state = 'album'; this.st = 0;
+    this.showAlbum();
+  }
+  albumPages() { return Object.keys(CHAPTERS[this.alb.ch].pages || {}); }
+  showAlbum() {
+    const A = this.alb, C = CHAPTERS[A.ch], f = A.found;
+    const sk = Object.keys(C.shards || {}), pk = this.albumPages();
+    const seen = [...sk, ...pk].some((k) => f.has(k)) || Album.read().allClear;
+    const nf = (ks) => ks.filter((k) => f.has(k)).length;
+    const shards = sk.map((k) => `<li class="${f.has(k) ? '' : 'none'}">${f.has(k) ? C.shards[k] : '？？？'}</li>`).join('');
+    const pages = pk.map((k, i) => f.has(k)
+      ? `<button data-cmd="a:page${i}"${A.sel === i ? ' class="sel"' : ''}>${C.pages[k].title}</button>`
+      : `<button class="none${A.sel === i ? ' sel' : ''}" disabled>？？？</button>`).join('');
+    const chs = Object.keys(CHAPTERS).map(Number);
+    const all = chs.reduce((n, c) => n + Object.keys({ ...CHAPTERS[c].shards, ...CHAPTERS[c].pages }).filter((k) => f.has(k)).length, 0);
+    const total = chs.reduce((n, c) => n + Object.keys({ ...CHAPTERS[c].shards, ...CHAPTERS[c].pages }).length, 0);
+    this.showCenter(`<div class="album">
+      <div class="ahead"><button data-cmd="a:prev">◀</button><span>第${A.ch}章 ─ ${seen ? C.title : '？？？'}</span><button data-cmd="a:next">▶</button></div>
+      <div class="acols">
+        <div class="acol"><h3>影絵の欠片 <small>${nf(sk)} / ${sk.length}</small></h3><ul>${shards}</ul></div>
+        <div class="acol"><h3>${C.pageLabel || '灯守りの手記'} <small>${nf(pk)} / ${pk.length}</small></h3><div class="apages">${pages}</div></div>
+      </div>
+      <div class="afoot"><span>みつけたもの ${all} / ${total}</span><button data-cmd="a:back">もどる</button></div>
+      ${Touch.enabled ? '' : '<div class="ahint">←→：章をめくる　↑↓：手記をえらぶ　Z：よむ　X：もどる</div>'}
+    </div>`, true, false, 'albumv');
+    this.ui.titlebg.style.display = 'block';
+  }
+  albumCommand(c) {
+    const A = this.alb, pk = this.albumPages(), chs = Object.keys(CHAPTERS).map(Number);
+    if (c === 'close') { A.open = null; this.showAlbum(); return; }
+    if (c === 'back') { this.alb = null; this.state = 'title'; this.showTitle(); return; }
+    if (c === 'prev' || c === 'next') {
+      const i = chs.indexOf(A.ch) + (c === 'next' ? 1 : -1);
+      A.ch = chs[(i + chs.length) % chs.length]; A.sel = 0; this.showAlbum(); return;
+    }
+    if (c.startsWith('page')) {
+      const i = +c.slice(4), k = pk[i];
+      if (!k || !A.found.has(k)) return;
+      A.sel = i; A.open = k; this.st = 0;
+      const p = CHAPTERS[A.ch].pages[k];
+      this.showCenter(`<div class="letter"><p class="sig" style="text-align:left">${p.title}</p>${p.body}<div class="more">▼</div></div>`, true, false, 'albumv');
+      this.ui.titlebg.style.display = 'block';
+    }
+  }
+  updateAlbum() {
+    const A = this.alb;
+    if (A.open) {
+      if (this.st > 10 && ['jump', 'start', 'attack', 'call'].some((k) => Input.pressed(k))) { Sfx.play('select'); this.albumCommand('close'); }
+      return;
+    }
+    if (Input.pressed('left')) { Sfx.play('select'); this.albumCommand('prev'); }
+    else if (Input.pressed('right')) { Sfx.play('select'); this.albumCommand('next'); }
+    else if (Input.pressed('up') || Input.pressed('down')) {
+      const n = this.albumPages().length;
+      if (n) { A.sel = (A.sel + (Input.pressed('up') ? n - 1 : 1)) % n; Sfx.play('select'); this.showAlbum(); }
+    } else if (Input.pressed('jump') || Input.pressed('start')) {
+      const k = this.albumPages()[A.sel];
+      if (k && A.found.has(k)) { Sfx.play('select'); this.albumCommand('page' + A.sel); }
+    } else if (Input.pressed('attack') || Input.pressed('call')) { Sfx.play('select'); this.albumCommand('back'); }
+  }
+
   // ---- DOM overlays -------------------------------------------------------------
   keysHtml() {
     if (Touch.enabled) {
@@ -1612,17 +1726,31 @@ class Game {
       <b>Enter</b>ポーズ　<b style="min-width:0">M</b> 音 ON/OFF</div>`;
   }
   showTitle() {
+    Album.sync();
+    const album = Album.read();
+    if (!album.allClear) HARD = false;
     this.titleSave = Save.read();
-    const sel = (i) => (this.titleSel === i ? ' class="sel"' : '');
-    const press = this.titleSave
-      ? `<div class="menu title-menu"><button data-cmd="continue"${sel(0)}>つづきから</button><button data-cmd="newgame"${sel(1)}>はじめから</button></div>
-         <div class="note">${this.saveLabel(this.titleSave)}</div>`
-      : `<div class="blink">${Touch.enabled ? 'タップでスタート' : 'PRESS Z / ENTER'}</div>`;
     const sv = this.titleSave;
+    // the menu: つづきから / はじめから, then (once the story has been seen to its end) the trial, and the album
+    const items = [];
+    if (sv) items.push(['continue', 'つづきから']);
+    items.push(['newgame', 'はじめから']);
+    if (HARD) items.push(['normal', 'もどる']);
+    else {
+      if (album.allClear) items.push(['hard', '灯守りの試練']);
+      if (album.found.length) items.push(['album', '思い出の頁']);
+    }
+    this.titleItems = items;
+    this.titleSel = Math.min(this.titleSel, items.length - 1);
+    const note = HARD ? '<div class="note">むずかしい ─ 影は しぶとく、防ぐ時間は 長い。 記録は 章の終わりにだけ</div>' : '';
+    const press = items.length > 1
+      ? `<div class="menu title-menu">${items.map(([c, l], i) => `<button data-cmd="${c}"${this.titleSel === i ? ' class="sel"' : ''}>${l}</button>`).join('')}</div>
+         ${sv ? `<div class="note">${this.saveLabel(sv)}</div>` : ''}${note}`
+      : `<div class="blink">${Touch.enabled ? 'タップでスタート' : 'PRESS Z / ENTER'}</div>`;
     let tn = sv && CHAPTERS[sv.chapter] ? sv.chapter : 1;
     if (sv && sv.cleared.includes(tn) && CHAPTERS[tn + 1]) tn++;
     const tc = CHAPTERS[tn];
-    this.showCenter(`<h1>灯のルミナ</h1><h2>第${tc.num}章 ─ ${tc.title}</h2>
+    this.showCenter(`<h1>灯のルミナ</h1><h2>${HARD ? '灯守りの試練 ─ ' : ''}第${tc.num}章 ─ ${tc.title}</h2>
       <div class="press">${press}
       ${document.body.classList.contains('portrait') ? '<div class="note">📱 横向きにすると 画面が大きくなります</div>' : ''}</div>`,
       false, false, 'title');
