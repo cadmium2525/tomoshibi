@@ -382,7 +382,8 @@ function drawOpening(ctx, op) {
     ctx.fillStyle = col;
     ctx.beginPath(); ctx.moveTo(0, 150); ctx.quadraticCurveTo(110, 96, 230, 140); ctx.lineTo(W, 150); ctx.lineTo(W, Hh); ctx.lineTo(0, Hh); ctx.fill();
     const cx = 118 + pan;
-    ctx.fillRect(cx - 30, 78, 60, 40); ctx.fillRect(cx - 40, 64, 14, 54); ctx.fillRect(cx + 26, 60, 14, 58); ctx.fillRect(cx - 8, 40, 16, 40);
+    // (walls and towers run down into the hill: the castle stands on it, wherever the slow pan puts it)
+    ctx.fillRect(cx - 30, 78, 60, 90); ctx.fillRect(cx - 40, 64, 14, 104); ctx.fillRect(cx + 26, 60, 14, 108); ctx.fillRect(cx - 8, 40, 16, 40);
     ctx.beginPath(); ctx.moveTo(cx - 42, 64); ctx.lineTo(cx - 33, 48); ctx.lineTo(cx - 24, 64); ctx.fill();
     ctx.beginPath(); ctx.moveTo(cx + 24, 60); ctx.lineTo(cx + 33, 42); ctx.lineTo(cx + 42, 60); ctx.fill();
     ctx.beginPath(); ctx.moveTo(cx - 10, 40); ctx.lineTo(cx, 22); ctx.lineTo(cx + 10, 40); ctx.fill();
