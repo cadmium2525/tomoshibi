@@ -1,8 +1,12 @@
-"""消灯番 (town guard) sprites from assets/chars/guard/sheet.webp.
+"""消灯番 (town guard) sprites.
 
-The generated sheet has a big portrait on the left and four labelled rows:
-walk (9 drawn), idle (4), alert (2), run (6). Neighbouring frames overlap a
-little, so every frame is cut at even spacing and only its biggest blob kept.
+assets/chars/guard/walk_run_sheet.webp (8 x 10 grid, the first cell unusable): standing,
+starting to walk, walking, breaking into a run, running. Used for idle (standing), walk
+(one 15-frame stride, 22-36) and run (one 8-frame stride, 55-62). The painted ground
+shadow is taken off. All these frames share one scale.
+assets/chars/guard/sheet.webp (the older sheet: a big portrait on the left and labelled
+rows) still gives the alert pose. Its frames are cut at even spacing and only the biggest
+blob kept.
 Facing right; the game mirrors for left.
 """
 import os
@@ -13,15 +17,15 @@ from pixlib import outline
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "assets", "chars", "guard", "sheet.webp")
+SRC2 = os.path.join(ROOT, "assets", "chars", "guard", "walk_run_sheet.webp")
+GRID = (8, 10)
+NEW = {"idle": [1, 3, 5, 7], "walk": list(range(22, 37)), "run": list(range(55, 63))}
 BODY_H = 50                         # hood to boots in game px (Grey is 46)
 PAL_N = 22
 
 # (name, y0, y1, x boundaries)
 ROWS = [
-    ("walk", 88, 320, np.linspace(540, 1510, 10)),
-    ("idle", 410, 668, [548, 680, 812, 948, 1082]),
     ("alert", 410, 668, [1140, 1296, 1470]),
-    ("run", 750, 986, np.linspace(518, 1498, 7)),
 ]
 
 
@@ -62,26 +66,51 @@ def cells():
     return out
 
 
+def new_cells():
+    a = np.array(Image.open(SRC2).convert("RGBA"))
+    H, W = a.shape[:2]
+    cw, ch = W / GRID[0], H / GRID[1]
+    out = []
+    for name, idx in NEW.items():
+        for i, k in enumerate(idx):
+            cx, cy = k % GRID[0], k // GRID[0]
+            x0, x1 = max(0, int(cx * cw) - 30), min(W, int((cx + 1) * cw) + 30)      # capes reach over the lines
+            c = a[int(cy * ch):int((cy + 1) * ch), x0:x1].copy()
+            keep = biggest_blob(c[..., 3] > 60)
+            c[~keep] = 0
+            # the painted ground shadow: pale grey in the last rows (the boots are dark)
+            ys = np.nonzero(keep.any(1))[0]
+            bot = ys.max()
+            rgb = c[..., :3].astype(int)
+            pale = (rgb.mean(-1) > 88) & (rgb.max(-1) - rgb.min(-1) < 14)
+            rows = np.arange(c.shape[0])[:, None] >= bot - 7
+            c[pale & rows] = 0
+            c[c[..., 3] < 100] = 0
+            out.append((f"{name}{i}", c, "new"))
+    return out
+
+
 def body_box(c):
     ys, xs = np.nonzero(c[..., 3] > 110)
     return xs.min(), ys.min(), xs.max() + 1, ys.max() + 1
 
 
 def frames():
-    cs = cells()
+    cs = [(n, c, n.rstrip('0123456789')) for n, c in cells()] + new_cells()
     # scale from the walk frames: hood top is the top of the dark cloak mass (the pole is thin)
     def hood_top(c):
         m = c[..., 3] > 110
         wide = m.sum(1) > 12
         return int(np.argmax(wide))
     # each row was drawn at its own size: scale every row to the same body height
+    # (the new sheet at one scale, from its walking frames)
     rowk = {}
-    for name, *_ in ROWS:
-        hs = [body_box(c)[3] - hood_top(c) for n, c in cs if n.rstrip('0123456789') == name]
-        rowk[name] = BODY_H / np.median(hs)
+    for g in {g for _, _, g in cs}:
+        hs = [body_box(c)[3] - hood_top(c) for n, c, g2 in cs if g2 == g and (g != "new" or n.startswith("walk"))]
+        rowk[g] = BODY_H / np.median(hs)
     small = {}
-    for n, c in cs:
-        k = rowk[n.rstrip('0123456789')]
+    for n, c, g in cs:
+        k = rowk[g]
         x0, y0, x1, y1 = body_box(c)
         crop = Image.fromarray(c[y0:y1, x0:x1])
         sm = np.array(crop.resize((max(1, round((x1 - x0) * k)), max(1, round((y1 - y0) * k))), Image.BOX)).astype(np.float32)

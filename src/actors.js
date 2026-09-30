@@ -1022,10 +1022,10 @@ class Guard extends Body {
   frame() {
     switch (this.state) {
       case 'alert': return 'alert' + (this.t < 20 ? 0 : 1);
-      case 'chase': return 'run' + (Math.floor(this.animDist / 6) % 6);
+      case 'chase': return 'run' + (Math.floor(this.animDist / 7) % 8);
       case 'look': case 'lost': case 'snuff': case 'stun': return 'idle' + (Math.floor(this.t / 15) % 4);
     }
-    if (Math.abs(this.vx) > 0.1) return 'walk' + (Math.floor(this.animDist / 3) % 9);
+    if (Math.abs(this.vx) > 0.1) return 'walk' + (Math.floor(this.animDist / 3.6) % 15);
     return 'idle' + (Math.floor(this.t / 20) % 4);
   }
   drawCone(ctx, cx, cy) {
